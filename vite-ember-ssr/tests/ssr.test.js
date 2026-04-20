@@ -258,3 +258,76 @@ describe('SSR awaits settled() when the SSR bundle exports it', () => {
     expect(html).toContain('data-waiter-result="ok"');
   });
 });
+
+// ─── Body attributes ─────────────────────────────────────────────────
+
+describe('body attributes', () => {
+  it('returns bodyAttrs as an empty object when no attributes are set', async () => {
+    const { rendered } = await renderRoute('/');
+
+    expect(rendered.bodyAttrs).toBeDefined();
+    expect(typeof rendered.bodyAttrs).toBe('object');
+  });
+
+  it('assembleHTML applies bodyAttrs to the <body> tag', () => {
+    const tmpl =
+      '<html><head><!-- VITE_EMBER_SSR_HEAD --></head><body><!-- VITE_EMBER_SSR_BODY --></body></html>';
+    const rendered = {
+      head: '<title>Test</title>',
+      body: '<div>content</div>',
+      bodyAttrs: { 'data-theme': 'dark', class: 'ember-application' },
+    };
+    const html = assembleHTML(tmpl, rendered);
+
+    expect(html).toContain(
+      '<body data-theme="dark" class="ember-application">',
+    );
+    expect(html).toContain('<div>content</div>');
+    expect(html).toContain('<title>Test</title>');
+  });
+
+  it('assembleHTML preserves existing body attributes', () => {
+    const tmpl =
+      '<html><head><!-- VITE_EMBER_SSR_HEAD --></head><body id="app"><!-- VITE_EMBER_SSR_BODY --></body></html>';
+    const rendered = {
+      head: '',
+      body: '<div>content</div>',
+      bodyAttrs: { 'data-theme': 'light' },
+    };
+    const html = assembleHTML(tmpl, rendered);
+
+    expect(html).toContain('id="app"');
+    expect(html).toContain('data-theme="light"');
+  });
+
+  it('assembleHTML handles empty bodyAttrs gracefully', () => {
+    const tmpl =
+      '<html><head><!-- VITE_EMBER_SSR_HEAD --></head><body><!-- VITE_EMBER_SSR_BODY --></body></html>';
+    const rendered = { head: '', body: '<div>hi</div>', bodyAttrs: {} };
+    const html = assembleHTML(tmpl, rendered);
+
+    expect(html).toContain('<body>');
+    expect(html).not.toContain('<body >');
+  });
+
+  it('assembleHTML escapes attribute values', () => {
+    const tmpl =
+      '<html><head><!-- VITE_EMBER_SSR_HEAD --></head><body><!-- VITE_EMBER_SSR_BODY --></body></html>';
+    const rendered = {
+      head: '',
+      body: '',
+      bodyAttrs: { 'data-info': 'he said "hello"' },
+    };
+    const html = assembleHTML(tmpl, rendered);
+
+    expect(html).toContain('data-info="he said &quot;hello&quot;"');
+  });
+
+  it('bodyAttrs do not bleed between renders', async () => {
+    const first = await renderRoute('/');
+    const second = await renderRoute('/about');
+
+    expect(first.rendered.bodyAttrs).toBeDefined();
+    expect(second.rendered.bodyAttrs).toBeDefined();
+  });
+});
