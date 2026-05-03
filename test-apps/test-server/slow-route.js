@@ -71,7 +71,6 @@ async function setupDevMode(app) {
 
       const rendered = await emberApp.renderRoute(url, {
         shoebox: true,
-        rehydrate: true,
       });
       const html = assembleHTML(template, rendered);
 
@@ -123,7 +122,6 @@ async function setupProductionMode(app) {
     try {
       const rendered = await emberApp.renderRoute(url, {
         shoebox: true,
-        rehydrate: true,
       });
       const html = assembleHTML(template, rendered);
 

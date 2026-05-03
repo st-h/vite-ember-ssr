@@ -13,7 +13,6 @@ export default defineConfig({
     emberSsg({
       routes: ['index', 'about', 'contact', 'pokemon-fetch'],
       shoebox: true,
-      rehydrate: true,
     }),
   ],
 });

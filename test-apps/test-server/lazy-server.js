@@ -59,7 +59,6 @@ async function start() {
     try {
       const rendered = await emberApp.renderRoute(url, {
         shoebox: false,
-        rehydrate: false,
         cssManifest,
       });
       const html = assembleHTML(template, rendered);

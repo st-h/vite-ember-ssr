@@ -10,9 +10,6 @@ export default defineConfig({
       babelHelpers: 'runtime',
       extensions,
     }),
-    emberSsr({
-      shoebox: true,
-      rehydrate: true,
-    }),
+    emberSsr(),
   ],
 });
