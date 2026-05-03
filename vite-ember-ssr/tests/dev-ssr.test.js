@@ -1,9 +1,14 @@
 /**
  * Dev-mode SSR integration tests.
  *
- * Spins up a real Vite dev server pointed at packages/test-app and exercises
+ * Spins up a real Vite dev server pointed at test-apps/test-app and exercises
  * `createEmberApp` with the `dev: { ssrLoadModule }` option. This verifies
  * that the in-process rendering path in src/dev.ts works end-to-end.
+ *
+ * The dev path is a separate code path from the worker (fresh Window per
+ * request, ssrLoadModule re-imports on every render). These tests focus on
+ * the dev-specific behaviour, not on re-validating Ember rendering output
+ * (which ssr.test.js already covers).
  *
  * NOTE: This test calls process.chdir() to the test-app root because
  * @embroider/vite reads process.cwd() when resolving plugins. Vitest runs
@@ -25,7 +30,6 @@ let emberApp;
 let originalCwd;
 
 beforeAll(async () => {
-  // @embroider/vite resolves modules relative to cwd — must be the Ember app root.
   originalCwd = process.cwd();
   process.chdir(testAppRoot);
 
@@ -35,10 +39,7 @@ beforeAll(async () => {
     root: testAppRoot,
     server: { middlewareMode: true },
     appType: 'custom',
-    // Silence Vite's output during tests
     logLevel: 'silent',
-    // Disable the dep optimizer — SSR tests don't serve a browser bundle,
-    // and esbuild's child process crashes on close() producing noisy errors.
     optimizeDeps: { noDiscovery: true, include: [] },
   });
 
@@ -55,9 +56,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await emberApp?.destroy();
-  // vite.close() can hang if esbuild's dep optimizer was interrupted
-  // (e.g. "build canceled" when the test process exits). Use a race
-  // with a timeout so a stalled close doesn't fail the whole suite.
+  // vite.close() can hang if esbuild's dep optimizer was interrupted,
+  // race with a timeout so a stalled close doesn't fail the whole suite.
   await Promise.race([
     vite?.close(),
     new Promise((resolve) => setTimeout(resolve, 5000)),
@@ -65,9 +65,6 @@ afterAll(async () => {
   if (originalCwd) process.chdir(originalCwd);
 }, 30_000);
 
-/**
- * Helper: render a route via the dev-mode path and return assembled HTML.
- */
 async function renderRoute(url, options = {}) {
   const rawTemplate = await readFile(
     resolve(testAppRoot, 'index.html'),
@@ -79,87 +76,31 @@ async function renderRoute(url, options = {}) {
   return { html, rendered };
 }
 
-// ─── Route rendering ──────────────────────────────────────────────────
+// ─── Dev path smoke ──────────────────────────────────────────────────
 
-describe('Dev SSR routing', () => {
-  it('renders the index route at /', async () => {
+describe('Dev SSR', () => {
+  it('renders a route via ssrLoadModule', async () => {
     const { html, rendered } = await renderRoute('/');
 
     expect(rendered.statusCode).toBe(200);
     expect(rendered.error).toBeUndefined();
-
     expect(html).toContain('data-route="index"');
-    expect(html).toContain('Welcome to vite-ember-ssr');
-    expect(html).toContain('Server-side rendered Ember application.');
   }, 30_000);
 
-  it('renders the about route at /about', async () => {
-    const { html, rendered } = await renderRoute('/about');
-
-    expect(rendered.statusCode).toBe(200);
-    expect(rendered.error).toBeUndefined();
-
-    expect(html).toContain('data-route="about"');
-    expect(html).toContain('<h1>About</h1>');
-    expect(html).not.toContain('data-route="index"');
-  }, 30_000);
-
-  it('renders the contact route at /contact', async () => {
-    const { html, rendered } = await renderRoute('/contact');
-
-    expect(rendered.statusCode).toBe(200);
-    expect(rendered.error).toBeUndefined();
-
-    expect(html).toContain('data-route="contact"');
-    expect(html).toContain('<h1>Contact</h1>');
-    expect(html).toContain('test@example.com');
-  }, 30_000);
-});
-
-// ─── HTML structure ───────────────────────────────────────────────────
-
-describe('Dev SSR HTML structure', () => {
-  it('replaces SSR markers in the template', async () => {
-    const { html } = await renderRoute('/');
-
-    expect(html).not.toContain('<!-- VITE_EMBER_SSR_HEAD -->');
-    expect(html).not.toContain('<!-- VITE_EMBER_SSR_BODY -->');
-  }, 30_000);
-
-  it('includes SSR boundary markers in body', async () => {
-    const { html } = await renderRoute('/');
-
-    expect(html).toContain('id="ssr-body-start"');
-    expect(html).toContain('id="ssr-body-end"');
-  }, 30_000);
-
-  it('omits SSR boundary markers when rehydrate is true', async () => {
-    const { html } = await renderRoute('/', { rehydrate: true });
+  it('emits the same rehydration shape as the production worker', async () => {
+    const { html, rendered } = await renderRoute('/');
 
     expect(html).not.toContain('id="ssr-body-start"');
     expect(html).not.toContain('id="ssr-body-end"');
-  }, 30_000);
-
-  it('includes rehydrate flag script when rehydrate is true', async () => {
-    const { html } = await renderRoute('/', { rehydrate: true });
-
     expect(html).toContain(
       '<script>window.__vite_ember_ssr_rehydrate__=true</script>',
     );
-  }, 30_000);
-
-  it('includes Glimmer serialization comments when rehydrate is true', async () => {
-    const { rendered } = await renderRoute('/', { rehydrate: true });
-
     expect(rendered.body).toContain('<!--%+b:');
-    expect(rendered.body).toContain('<!--%-b:');
   }, 30_000);
-});
 
-// ─── Isolation ────────────────────────────────────────────────────────
-
-describe('Dev SSR isolation between requests', () => {
-  it('renders different routes without cross-contamination', async () => {
+  it('isolates each request despite re-loading the SSR module', async () => {
+    // Dev creates a fresh Window per request and re-imports the SSR entry.
+    // Verify state does not bleed across renders.
     const index = await renderRoute('/');
     const about = await renderRoute('/about');
     const contact = await renderRoute('/contact');
@@ -170,29 +111,24 @@ describe('Dev SSR isolation between requests', () => {
 
     expect(index.html).not.toContain('data-route="about"');
     expect(about.html).not.toContain('data-route="contact"');
-    expect(contact.html).not.toContain('data-route="index"');
-  }, 60_000);
 
-  it('each dev SSR request gets fresh counter state', async () => {
-    const index = await renderRoute('/');
-    const about = await renderRoute('/about');
-
+    // Counter starts at 0 on every render
     expect(index.html).toContain('data-count="0"');
     expect(about.html).toContain('data-count="0"');
   }, 60_000);
 });
 
-// ─── Shoebox in dev mode ──────────────────────────────────────────────
+// ─── Dev-path fetch + shoebox ────────────────────────────────────────
 
-describe('Dev SSR shoebox (fetch capture)', () => {
-  it('includes a shoebox script tag for routes that fetch data', async () => {
-    const { html } = await renderRoute('/pokemon-fetch', { shoebox: true });
+describe('Dev SSR fetch and shoebox', () => {
+  it('renders a route that fetches data', async () => {
+    const { html, rendered } = await renderRoute('/pokemon-fetch');
 
-    expect(html).toContain('id="vite-ember-ssr-shoebox"');
-    expect(html).toContain('type="application/json"');
+    expect(rendered.statusCode).toBe(200);
+    expect(html).toContain('data-pokemon="bulbasaur"');
   }, 30_000);
 
-  it('contains valid JSON with captured fetch entries', async () => {
+  it('captures fetch responses into the shoebox when enabled', async () => {
     const { html } = await renderRoute('/pokemon-fetch', { shoebox: true });
 
     const scriptMatch = html.match(
@@ -201,9 +137,7 @@ describe('Dev SSR shoebox (fetch capture)', () => {
     expect(scriptMatch).not.toBeNull();
 
     const entries = JSON.parse(scriptMatch[1]);
-    expect(Array.isArray(entries)).toBe(true);
     expect(entries.length).toBeGreaterThan(0);
-
     for (const entry of entries) {
       expect(entry).toHaveProperty('url');
       expect(entry).toHaveProperty('status');
@@ -211,37 +145,9 @@ describe('Dev SSR shoebox (fetch capture)', () => {
     }
   }, 30_000);
 
-  it('does NOT include a shoebox when shoebox option is false', async () => {
+  it('omits the shoebox when disabled', async () => {
     const { html } = await renderRoute('/pokemon-fetch', { shoebox: false });
 
     expect(html).not.toContain('id="vite-ember-ssr-shoebox"');
-  }, 30_000);
-
-  it('does NOT include a shoebox for routes that do not fetch data', async () => {
-    const { html } = await renderRoute('/', { shoebox: true });
-
-    expect(html).not.toContain('id="vite-ember-ssr-shoebox"');
-  }, 30_000);
-});
-
-// ─── Fetch in dev mode ────────────────────────────────────────────────
-
-describe('Dev SSR with fetch in route model hooks', () => {
-  it('renders the pokemon list with fetched data', async () => {
-    const { html, rendered } = await renderRoute('/pokemon-fetch');
-
-    expect(rendered.statusCode).toBe(200);
-    expect(html).toContain('data-route="pokemon-fetch"');
-    expect(html).toContain('<h1>Pokémon (Fetch)</h1>');
-    expect(html).toContain('data-pokemon="bulbasaur"');
-  }, 30_000);
-
-  it('renders a pokemon detail page with fetched data', async () => {
-    const { html, rendered } = await renderRoute('/pokemon-fetch/pikachu');
-
-    expect(rendered.statusCode).toBe(200);
-    expect(html).toContain('data-route="pokemon-fetch.show"');
-    expect(html).toContain('data-pokemon-name="pikachu"');
-    expect(html).toContain('data-type="electric"');
   }, 30_000);
 });

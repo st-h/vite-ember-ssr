@@ -1,3 +1,15 @@
+/**
+ * Combined SSR + SSG mode tests.
+ *
+ * Combined mode is when both `emberSsr()` and `emberSsg()` are registered.
+ * The SSG plugin detects emberSsr and switches its output strategy:
+ * - Output goes to dist/client/ alongside the client assets
+ * - The original index.html is preserved as _template.html for dynamic SSR
+ * - The SSR bundle is built into dist/server/ as usual
+ *
+ * These tests focus on the combined-mode-specific behaviour. Generic SSR
+ * and SSG output is already covered by ssr.test.js and ssg.test.js.
+ */
 import { describe, it, expect } from 'vitest';
 import { resolve } from 'node:path';
 import { readFile, access } from 'node:fs/promises';
@@ -11,9 +23,6 @@ const combinedDist = resolve(
 const clientDir = resolve(combinedDist, 'client');
 const serverDir = resolve(combinedDist, 'server');
 
-/**
- * Helper: read a prerendered HTML file from dist/client/.
- */
 async function readPrerenderedHtml(route) {
   const filePath =
     route === 'index'
@@ -22,9 +31,6 @@ async function readPrerenderedHtml(route) {
   return readFile(filePath, 'utf-8');
 }
 
-/**
- * Helper: check if a file or directory exists.
- */
 async function fileExists(filePath) {
   try {
     await access(filePath);
@@ -36,237 +42,85 @@ async function fileExists(filePath) {
 
 // ─── Build output structure ──────────────────────────────────────────
 
-describe('Combined SSR+SSG build output structure', () => {
-  it('places client assets in dist/client/', async () => {
-    const exists = await fileExists(resolve(clientDir, 'assets'));
-    expect(exists).toBe(true);
+describe('Combined mode build output', () => {
+  it('places client assets and SSR bundle in separate directories', async () => {
+    expect(await fileExists(resolve(clientDir, 'assets'))).toBe(true);
+    expect(await fileExists(resolve(serverDir, 'app-ssr.mjs'))).toBe(true);
   });
 
-  it('places SSR server bundle in dist/server/', async () => {
-    const exists = await fileExists(resolve(serverDir, 'app-ssr.mjs'));
-    expect(exists).toBe(true);
-  });
-
-  it('writes package.json with type:module in dist/server/', async () => {
+  it('writes a type:module package.json next to the SSR bundle', async () => {
     const pkgPath = resolve(serverDir, 'package.json');
-    const exists = await fileExists(pkgPath);
-    expect(exists).toBe(true);
+    expect(await fileExists(pkgPath)).toBe(true);
 
     const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'));
     expect(pkg.type).toBe('module');
   });
 
   it('cleans up the .ssg-tmp directory after build', async () => {
-    const exists = await fileExists(resolve(combinedDist, '../.ssg-tmp'));
-    expect(exists).toBe(false);
+    expect(await fileExists(resolve(combinedDist, '../.ssg-tmp'))).toBe(false);
   });
 
-  it('preserves the original index.html as _template.html', async () => {
-    const exists = await fileExists(resolve(clientDir, '_template.html'));
-    expect(exists).toBe(true);
-  });
+  it('preserves index.html as _template.html for dynamic SSR fallback', async () => {
+    expect(await fileExists(resolve(clientDir, '_template.html'))).toBe(true);
 
-  it('_template.html contains SSR markers for dynamic rendering', async () => {
     const template = await readFile(
       resolve(clientDir, '_template.html'),
       'utf-8',
     );
     expect(template).toContain('<!-- VITE_EMBER_SSR_HEAD -->');
     expect(template).toContain('<!-- VITE_EMBER_SSR_BODY -->');
-  });
-
-  it('_template.html includes client JS and CSS bundles', async () => {
-    const template = await readFile(
-      resolve(clientDir, '_template.html'),
-      'utf-8',
-    );
     expect(template).toMatch(/src="\/assets\/main-[a-zA-Z0-9_-]+\.js"/);
-    expect(template).toMatch(/href="\/assets\/main-[a-zA-Z0-9_-]+\.css"/);
   });
 });
 
-// ─── Prerendered file existence ──────────────────────────────────────
+// ─── Selective prerendering ──────────────────────────────────────────
 
-describe('Combined mode: prerendered files exist in dist/client/', () => {
-  it('generates index.html at dist/client/', async () => {
-    const exists = await fileExists(resolve(clientDir, 'index.html'));
-    expect(exists).toBe(true);
+describe('Combined mode prerenders only routes listed in the routes option', () => {
+  it('emits prerendered HTML for listed routes', async () => {
+    expect(await fileExists(resolve(clientDir, 'index.html'))).toBe(true);
+    expect(await fileExists(resolve(clientDir, 'about/index.html'))).toBe(true);
+    expect(await fileExists(resolve(clientDir, 'contact/index.html'))).toBe(
+      true,
+    );
   });
 
-  it('generates about/index.html', async () => {
-    const exists = await fileExists(resolve(clientDir, 'about/index.html'));
-    expect(exists).toBe(true);
-  });
-
-  it('generates contact/index.html', async () => {
-    const exists = await fileExists(resolve(clientDir, 'contact/index.html'));
-    expect(exists).toBe(true);
-  });
-
-  it('does NOT generate static files for non-prerendered routes', async () => {
+  it('does not emit static files for non-prerendered routes', async () => {
     // pokemon-fetch and pokemon-warp-drive were not in the SSG routes list
-    const pokemonFetchExists = await fileExists(
-      resolve(clientDir, 'pokemon-fetch/index.html'),
+    expect(
+      await fileExists(resolve(clientDir, 'pokemon-fetch/index.html')),
+    ).toBe(false);
+    expect(
+      await fileExists(resolve(clientDir, 'pokemon-warp-drive/index.html')),
+    ).toBe(false);
+  });
+});
+
+// ─── Prerendered HTML emits the same shape as runtime SSR ────────────
+
+describe('Combined mode prerendered HTML', () => {
+  it('emits the rehydration shape on prerendered pages', async () => {
+    const html = await readPrerenderedHtml('index');
+    expect(html).not.toContain('id="ssr-body-start"');
+    expect(html).toContain(
+      '<script>window.__vite_ember_ssr_rehydrate__=true</script>',
     );
-    const pokemonWarpDriveExists = await fileExists(
-      resolve(clientDir, 'pokemon-warp-drive/index.html'),
-    );
-    expect(pokemonFetchExists).toBe(false);
-    expect(pokemonWarpDriveExists).toBe(false);
   });
 });
 
-// ─── Prerendered HTML content ────────────────────────────────────────
+// ─── Dynamic SSR fallback (the runtime side of combined mode) ────────
 
-describe('Combined mode: prerendered HTML content', () => {
-  it('replaces SSR markers in prerendered pages', async () => {
-    for (const route of ['index', 'about', 'contact']) {
-      const html = await readPrerenderedHtml(route);
-      expect(html).not.toContain('<!-- VITE_EMBER_SSR_HEAD -->');
-      expect(html).not.toContain('<!-- VITE_EMBER_SSR_BODY -->');
-    }
-  });
-
-  it('includes SSR boundary markers in prerendered pages', async () => {
-    for (const route of ['index', 'about', 'contact']) {
-      const html = await readPrerenderedHtml(route);
-      expect(html).toContain('id="ssr-body-start"');
-      expect(html).toContain('id="ssr-body-end"');
-    }
-  });
-
-  it('does NOT include rehydrate flag script (cleanup mode)', async () => {
-    for (const route of ['index', 'about', 'contact']) {
-      const html = await readPrerenderedHtml(route);
-      expect(html).not.toContain('__vite_ember_ssr_rehydrate__');
-    }
-  });
-
-  it('includes client JS and CSS bundles', async () => {
-    for (const route of ['index', 'about', 'contact']) {
-      const html = await readPrerenderedHtml(route);
-      expect(html).toMatch(/src="\/assets\/main-[a-zA-Z0-9_-]+\.js"/);
-      expect(html).toMatch(/href="\/assets\/main-[a-zA-Z0-9_-]+\.css"/);
-    }
-  });
-
-  it('sets the page title', async () => {
-    const html = await readPrerenderedHtml('index');
-    expect(html).toContain('<title>TestApp</title>');
-  });
-});
-
-// ─── Index route ─────────────────────────────────────────────────────
-
-describe('Combined mode: index route content', () => {
-  it('contains index-specific content', async () => {
-    const html = await readPrerenderedHtml('index');
-    expect(html).toContain('data-route="index"');
-    expect(html).toContain('Welcome to vite-ember-ssr');
-  });
-
-  it('renders CounterDisplay and ItemList components', async () => {
-    const html = await readPrerenderedHtml('index');
-    expect(html).toContain('data-component="counter-display"');
-    expect(html).toContain('data-count="0"');
-    expect(html).toContain('data-component="item-list"');
-    expect(html).toContain('data-item-count="5"');
-  });
-
-  it('renders navigation links', async () => {
-    const html = await readPrerenderedHtml('index');
-    expect(html).toContain('href="/"');
-    expect(html).toContain('href="/about"');
-    expect(html).toContain('href="/contact"');
-    expect(html).toContain('href="/pokemon-fetch"');
-  });
-
-  it('does not contain other route content', async () => {
-    const html = await readPrerenderedHtml('index');
-    expect(html).not.toContain('data-route="about"');
-    expect(html).not.toContain('data-route="contact"');
-  });
-});
-
-// ─── About route ─────────────────────────────────────────────────────
-
-describe('Combined mode: about route content', () => {
-  it('contains about-specific content', async () => {
-    const html = await readPrerenderedHtml('about');
-    expect(html).toContain('data-route="about"');
-    expect(html).toContain('<h1>About</h1>');
-  });
-
-  it('renders CounterDisplay but not ItemList', async () => {
-    const html = await readPrerenderedHtml('about');
-    expect(html).toContain('data-component="counter-display"');
-    expect(html).not.toContain('data-component="item-list"');
-  });
-
-  it('does not contain other route content', async () => {
-    const html = await readPrerenderedHtml('about');
-    expect(html).not.toContain('data-route="index"');
-    expect(html).not.toContain('data-route="contact"');
-  });
-});
-
-// ─── Contact route ───────────────────────────────────────────────────
-
-describe('Combined mode: contact route content', () => {
-  it('contains contact-specific content', async () => {
-    const html = await readPrerenderedHtml('contact');
-    expect(html).toContain('data-route="contact"');
-    expect(html).toContain('<h1>Contact</h1>');
-    expect(html).toContain('test@example.com');
-    expect(html).toContain('GitHub: vite-ember-ssr');
-  });
-
-  it('does not contain other route content', async () => {
-    const html = await readPrerenderedHtml('contact');
-    expect(html).not.toContain('data-route="index"');
-    expect(html).not.toContain('data-route="about"');
-  });
-});
-
-// ─── Route isolation ─────────────────────────────────────────────────
-
-describe('Combined mode: route isolation', () => {
-  it('each prerendered page contains only its own data-route attribute', async () => {
-    const index = await readPrerenderedHtml('index');
-    const about = await readPrerenderedHtml('about');
-    const contact = await readPrerenderedHtml('contact');
-
-    expect(index).toContain('data-route="index"');
-    expect(index).not.toContain('data-route="about"');
-    expect(index).not.toContain('data-route="contact"');
-
-    expect(about).toContain('data-route="about"');
-    expect(about).not.toContain('data-route="index"');
-    expect(about).not.toContain('data-route="contact"');
-
-    expect(contact).toContain('data-route="contact"');
-    expect(contact).not.toContain('data-route="index"');
-    expect(contact).not.toContain('data-route="about"');
-  });
-});
-
-// ─── SSR server bundle validation ────────────────────────────────────
-
-describe('Combined mode: SSR server bundle', () => {
-  it('exports a createSsrApp function', async () => {
+describe('Combined mode dynamic SSR fallback', () => {
+  it('the SSR bundle exports createSsrApp', async () => {
     const bundlePath = resolve(serverDir, 'app-ssr.mjs');
     const { pathToFileURL } = await import('node:url');
     const ssrModule = await import(pathToFileURL(bundlePath).href);
     expect(typeof ssrModule.createSsrApp).toBe('function');
   });
 
-  it('can dynamically render a non-prerendered route', async () => {
+  it('renders a non-prerendered route on demand', async () => {
     const { createEmberApp, assembleHTML } =
       await import('vite-ember-ssr/server');
     const bundlePath = resolve(serverDir, 'app-ssr.mjs');
-
-    // Read the preserved SSR template — emberSsg copies index.html to
-    // _template.html before overwriting it with prerendered content.
     const template = await readFile(
       resolve(clientDir, '_template.html'),
       'utf-8',
@@ -277,25 +131,22 @@ describe('Combined mode: SSR server bundle', () => {
       const rendered = await dynApp.renderRoute('/pokemon-fetch', {
         shoebox: true,
       });
-      const result = {
-        statusCode: rendered.statusCode,
-        html: assembleHTML(template, rendered),
-      };
+      const html = assembleHTML(template, rendered);
 
-      expect(result.statusCode).toBe(200);
-      expect(result.html).toContain('data-route="pokemon-fetch"');
-      expect(result.html).toContain('data-component="pokemon-list"');
-      expect(result.html).toContain('data-pokemon="bulbasaur"');
+      expect(rendered.statusCode).toBe(200);
+      expect(html).toContain('data-route="pokemon-fetch"');
+      expect(html).toContain('data-pokemon="bulbasaur"');
     } finally {
       await dynApp.destroy();
     }
   });
 
-  it('renders the about route dynamically (matching prerendered output)', async () => {
+  it('can also dynamically render a route that has a prerendered version', async () => {
+    // Useful to confirm the dynamic fallback path works for any URL,
+    // not just the un-prerendered ones.
     const { createEmberApp, assembleHTML } =
       await import('vite-ember-ssr/server');
     const bundlePath = resolve(serverDir, 'app-ssr.mjs');
-
     const template = await readFile(
       resolve(clientDir, '_template.html'),
       'utf-8',
@@ -303,28 +154,13 @@ describe('Combined mode: SSR server bundle', () => {
 
     const dynApp = await createEmberApp(bundlePath);
     try {
-      const rendered = await dynApp.renderRoute('/about', { shoebox: true });
-      const result = {
-        statusCode: rendered.statusCode,
-        html: assembleHTML(template, rendered),
-      };
+      const rendered = await dynApp.renderRoute('/about');
+      const html = assembleHTML(template, rendered);
 
-      expect(result.statusCode).toBe(200);
-      expect(result.html).toContain('data-route="about"');
-      expect(result.html).toContain('<h1>About</h1>');
+      expect(rendered.statusCode).toBe(200);
+      expect(html).toContain('data-route="about"');
     } finally {
       await dynApp.destroy();
-    }
-  });
-});
-
-// ─── No shoebox on static routes (no data fetching) ──────────────────
-
-describe('Combined mode: shoebox behavior', () => {
-  it('does NOT include shoebox on routes that do not fetch data', async () => {
-    for (const route of ['index', 'about', 'contact']) {
-      const html = await readPrerenderedHtml(route);
-      expect(html).not.toContain('id="vite-ember-ssr-shoebox"');
     }
   });
 });
