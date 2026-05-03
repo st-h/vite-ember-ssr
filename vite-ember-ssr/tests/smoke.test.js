@@ -77,47 +77,50 @@ function readHtml(dir, route) {
   return readFile(filePath, 'utf-8');
 }
 
-describe.each(apps)('Library invariants: $name', ({ dir, route, expectedRoute }) => {
-  let html;
+describe.each(apps)(
+  'Library invariants: $name',
+  ({ dir, route, expectedRoute }) => {
+    let html;
 
-  it('reads the prerendered HTML', async () => {
-    html = await readHtml(dir, route);
-    expect(html.length).toBeGreaterThan(0);
-  });
+    it('reads the prerendered HTML', async () => {
+      html = await readHtml(dir, route);
+      expect(html.length).toBeGreaterThan(0);
+    });
 
-  it('replaces the SSR template markers', () => {
-    expect(html).not.toContain('<!-- VITE_EMBER_SSR_HEAD -->');
-    expect(html).not.toContain('<!-- VITE_EMBER_SSR_BODY -->');
-  });
+    it('replaces the SSR template markers', () => {
+      expect(html).not.toContain('<!-- VITE_EMBER_SSR_HEAD -->');
+      expect(html).not.toContain('<!-- VITE_EMBER_SSR_BODY -->');
+    });
 
-  it('omits boundary markers (rehydrate output)', () => {
-    expect(html).not.toContain('id="ssr-body-start"');
-    expect(html).not.toContain('id="ssr-body-end"');
-  });
+    it('omits boundary markers (rehydrate output)', () => {
+      expect(html).not.toContain('id="ssr-body-start"');
+      expect(html).not.toContain('id="ssr-body-end"');
+    });
 
-  it('places the rehydrate flag in <head>', () => {
-    const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/);
-    expect(headMatch).not.toBeNull();
-    expect(headMatch[1]).toContain(
-      '<script>window.__vite_ember_ssr_rehydrate__=true</script>',
-    );
-  });
+    it('places the rehydrate flag in <head>', () => {
+      const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/);
+      expect(headMatch).not.toBeNull();
+      expect(headMatch[1]).toContain(
+        '<script>window.__vite_ember_ssr_rehydrate__=true</script>',
+      );
+    });
 
-  it('emits Glimmer serialization markers in the body', () => {
-    expect(html).toContain('<!--%+b:');
-    expect(html).toContain('<!--%-b:');
-  });
+    it('emits Glimmer serialization markers in the body', () => {
+      expect(html).toContain('<!--%+b:');
+      expect(html).toContain('<!--%-b:');
+    });
 
-  it('extracts a <title> into <head>', () => {
-    const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/);
-    expect(headMatch?.[1]).toMatch(/<title>[^<]+<\/title>/);
-  });
+    it('extracts a <title> into <head>', () => {
+      const headMatch = html.match(/<head[^>]*>([\s\S]*?)<\/head>/);
+      expect(headMatch?.[1]).toMatch(/<title>[^<]+<\/title>/);
+    });
 
-  it('references the client JS bundle', () => {
-    expect(html).toMatch(/src="\/assets\/[^"]+\.js"/);
-  });
+    it('references the client JS bundle', () => {
+      expect(html).toMatch(/src="\/assets\/[^"]+\.js"/);
+    });
 
-  it('rendered the expected route', () => {
-    expect(html).toContain(`data-route="${expectedRoute}"`);
-  });
-});
+    it('rendered the expected route', () => {
+      expect(html).toContain(`data-route="${expectedRoute}"`);
+    });
+  },
+);
