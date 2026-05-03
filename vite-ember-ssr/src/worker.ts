@@ -32,6 +32,7 @@ export interface WorkerRenderOptions {
   url: string;
   shoebox: boolean;
   cssManifest: CssManifest | null;
+  settledTimeout: number;
 }
 
 export interface WorkerRenderResult {
@@ -110,6 +111,7 @@ const { ssrBundlePath: startupBundlePath } = (
 
 const startupMod = (await import(startupBundlePath)) as {
   createSsrApp?: () => EmberApplication;
+  settled?: () => Promise<void>;
 };
 if (typeof startupMod.createSsrApp !== 'function') {
   throw new Error(
@@ -119,6 +121,14 @@ if (typeof startupMod.createSsrApp !== 'function') {
 }
 
 const app: EmberApplication = startupMod.createSsrApp();
+
+// Optional: the SSR bundle may re-export `settled` from `@ember/test-helpers`.
+// When present, the renderer awaits it after `app.visit()` so any registered
+// `@ember/test-waiters` (used by WarpDrive, ember-concurrency, etc.) drain
+// before the DOM is captured. When absent, we fall back to a single
+// Backburner autorun drain via `setTimeout(0)`.
+const appSettled: (() => Promise<void>) | null =
+  typeof startupMod.settled === 'function' ? startupMod.settled : null;
 
 // ─── Shoebox ──────────────────────────────────────────────────────────
 
@@ -203,10 +213,39 @@ function buildRouteCssLinks(
   return links.join('');
 }
 
+async function awaitSettled(timeoutMs: number): Promise<void> {
+  if (!appSettled) {
+    // Fallback: drain Backburner's autorun microtask before reading the DOM.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    return;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      appSettled(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`settled() timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } catch (e) {
+    console.warn(
+      `[vite-ember-ssr] settled() did not resolve within ${timeoutMs}ms, ` +
+        `capturing DOM anyway:`,
+      e instanceof Error ? e.message : e,
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export default async function render(
   options: WorkerRenderOptions,
 ): Promise<WorkerRenderResult> {
-  const { url, shoebox, cssManifest } = options;
+  const { url, shoebox, cssManifest, settledTimeout } = options;
 
   // Use the long-lived document directly — no new Window, no globalThis swap.
   const document = win.document;
@@ -232,8 +271,10 @@ export default async function render(
 
     const instance = await app.visit(url, bootOptions);
 
-    // Drain Backburner's autorun microtask before reading the DOM.
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    // Wait for the app to settle (test waiters, run loop, pending timers, etc.)
+    // before reading the DOM. Falls back to a microtask drain when the SSR
+    // bundle doesn't export `settled`.
+    await awaitSettled(settledTimeout);
 
     if (cssManifest) cssLinks = buildRouteCssLinks(cssManifest, instance);
     head = document.head?.innerHTML ?? '';
