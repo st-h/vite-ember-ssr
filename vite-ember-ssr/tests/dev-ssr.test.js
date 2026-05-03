@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { createEmberApp, assembleHTML } from 'vite-ember-ssr/server';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const testAppRoot = resolve(__dirname, '../../test-app');
+const testAppRoot = resolve(__dirname, '../../test-apps/test-app');
 const ssrEntryPath = resolve(testAppRoot, 'app/app-ssr.ts');
 
 let vite;

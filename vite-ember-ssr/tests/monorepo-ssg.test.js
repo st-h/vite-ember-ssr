@@ -25,7 +25,10 @@ import { readFile, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const ssgDist = resolve(__dirname, '../../test-app-monorepo-ssg/dist');
+const ssgDist = resolve(
+  __dirname,
+  '../../test-apps/test-app-monorepo-ssg/dist',
+);
 
 /**
  * Helper: read a prerendered HTML file from the SSG dist output.

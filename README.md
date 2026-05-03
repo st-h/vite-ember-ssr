@@ -1,1 +1,1 @@
-packages/vite-ember-ssr/README.md
+vite-ember-ssr/README.md

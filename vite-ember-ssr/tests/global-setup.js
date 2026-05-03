@@ -11,8 +11,8 @@ import { stat, readdir } from 'node:fs/promises';
 import { availableParallelism } from 'node:os';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const packagesRoot = resolve(__dirname, '../..');
-const viteEmberSsrRoot = resolve(packagesRoot, 'vite-ember-ssr');
+const packagesRoot = resolve(__dirname, '../../test-apps');
+const viteEmberSsrRoot = resolve(__dirname, '../../vite-ember-ssr');
 const monorepoLibRoot = resolve(packagesRoot, 'monorepo-lib');
 
 const testApps = [

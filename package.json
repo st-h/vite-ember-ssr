@@ -14,7 +14,7 @@
   "main": "index.js",
   "scripts": {
     "build": "pnpm --filter vite-ember-ssr build && pnpm --filter test-app build:all",
-    "clean": "rm -rf packages/*/dist",
+    "clean": "rm -rf test-apps/*/dist && rm -rf vite-ember-ssr/dist",
     "demo": "pnpm build && pnpm --filter test-server start",
     "dev": "pnpm --filter test-server dev",
     "format": "prettier --write .",

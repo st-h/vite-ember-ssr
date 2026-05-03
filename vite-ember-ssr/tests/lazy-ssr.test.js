@@ -9,7 +9,10 @@ import {
 } from 'vite-ember-ssr/server';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const testAppDist = resolve(__dirname, '../../test-app-lazy-ssr/dist');
+const testAppDist = resolve(
+  __dirname,
+  '../../test-apps/test-app-lazy-ssr/dist',
+);
 
 let template;
 let cssManifest;

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createEmberApp, assembleHTML } from 'vite-ember-ssr/server';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const testAppDist = resolve(__dirname, '../../test-app/dist');
+const testAppDist = resolve(__dirname, '../../test-apps/test-app/dist');
 
 let template;
 let app;

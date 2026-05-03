@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const testServerDir = resolve(__dirname, '../test-server');
-const ssgDistDir = resolve(__dirname, '../test-app-ssg/dist');
+const testServerDir = resolve(__dirname, '../test-apps/test-server');
+const ssgDistDir = resolve(__dirname, '../test-apps/test-app-ssg/dist');
 
 export default defineConfig({
   testDir: './tests',

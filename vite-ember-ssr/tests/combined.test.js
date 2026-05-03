@@ -4,7 +4,10 @@ import { readFile, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const combinedDist = resolve(__dirname, '../../test-app-combined/dist');
+const combinedDist = resolve(
+  __dirname,
+  '../../test-apps/test-app-combined/dist',
+);
 const clientDir = resolve(combinedDist, 'client');
 const serverDir = resolve(combinedDist, 'server');
 
