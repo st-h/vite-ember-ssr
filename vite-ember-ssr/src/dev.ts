@@ -235,6 +235,7 @@ export function createDevEmberApp(
 
       let head = '';
       let body = '';
+      let bodyAttrs: Record<string, string> = {};
       let cssLinks = '';
       let error: Error | undefined;
 
@@ -304,6 +305,14 @@ export function createDevEmberApp(
 
         head = document.head?.innerHTML ?? '';
         body = document.body?.innerHTML ?? '';
+
+        // Extract attributes set on <body> during rendering
+        if (document.body) {
+          for (const attr of Array.from(document.body.attributes)) {
+            bodyAttrs[attr.name] = attr.value;
+          }
+        }
+
         instance.destroy();
       } catch (e) {
         error = e instanceof Error ? e : new Error(String(e));
@@ -324,6 +333,7 @@ export function createDevEmberApp(
       return {
         head: fullHead,
         body,
+        bodyAttrs,
         statusCode: error ? 500 : 200,
         ...(error ? { error } : {}),
       };

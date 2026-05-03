@@ -38,6 +38,7 @@ export interface WorkerRenderOptions {
 export interface WorkerRenderResult {
   head: string;
   body: string;
+  bodyAttrs: Record<string, string>;
   statusCode: number;
   error?: string;
 }
@@ -256,6 +257,7 @@ export default async function render(
 
   let head = '';
   let body = '';
+  let bodyAttrs: Record<string, string> = {};
   let cssLinks = '';
   let error: Error | undefined;
 
@@ -280,6 +282,13 @@ export default async function render(
     head = document.head?.innerHTML ?? '';
     body = document.body?.innerHTML ?? '';
 
+    // Extract attributes set on <body> during rendering (e.g., data-theme, class).
+    if (document.body) {
+      for (const attr of Array.from(document.body.attributes)) {
+        bodyAttrs[attr.name] = attr.value;
+      }
+    }
+
     // Destroy the instance so its container is torn down cleanly.
     // app.visit() creates a fresh ApplicationInstance per call; without
     // destroying it the container's singletons (including location:none)
@@ -289,6 +298,13 @@ export default async function render(
     // Serialize mode leaves rehydration markers in the DOM, so we clear
     // the body to ensure a clean slate for the next render.
     document.body.innerHTML = '';
+
+    // Clear body attributes so they don't bleed into the next render.
+    if (document.body) {
+      for (const attr of Array.from(document.body.attributes)) {
+        document.body.removeAttribute(attr.name);
+      }
+    }
   } catch (e) {
     error = e instanceof Error ? e : new Error(String(e));
   }
@@ -304,6 +320,7 @@ export default async function render(
   return {
     head: fullHead,
     body,
+    bodyAttrs,
     statusCode: error ? 500 : 200,
     ...(error
       ? { error: error.message + (error.stack ? '\n' + error.stack : '') }
