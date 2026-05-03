@@ -53,6 +53,19 @@ export interface RenderRouteOptions {
    * client build (written as `css-manifest.json`).
    */
   cssManifest?: CssManifest;
+
+  /**
+   * Maximum time (in milliseconds) to wait for `settled()` to resolve after
+   * `app.visit()`. Only applies when the SSR bundle exports a `settled`
+   * function (typically re-exported from `@ember/test-helpers`).
+   *
+   * If the timeout is exceeded, a warning is logged and the DOM is captured
+   * regardless. Use this to bound render time when a route registers a
+   * waiter that never resolves.
+   *
+   * @default 10000
+   */
+  settledTimeout?: number;
 }
 
 export interface RenderResult {
@@ -265,6 +278,7 @@ export async function createEmberApp(
         url,
         shoebox: renderOptions.shoebox ?? false,
         cssManifest: renderOptions.cssManifest ?? null,
+        settledTimeout: renderOptions.settledTimeout ?? 10_000,
       })) as {
         head: string;
         body: string;

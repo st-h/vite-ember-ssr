@@ -3,6 +3,10 @@
  *
  * Uses the same strict resolver as the client app but with autoboot
  * disabled so the server can control boot timing via app.visit().
+ *
+ * Re-exports `settled` from `@ember/test-helpers` so the renderer can
+ * `await settled()` after `app.visit()` to drain `@ember/test-waiters`
+ * (used by WarpDrive, ember-concurrency, etc.) before capturing the DOM.
  */
 import EmberApp from 'ember-strict-application-resolver';
 import '@warp-drive/ember/install';
@@ -10,6 +14,8 @@ import { setBuildURLConfig } from '@warp-drive/utilities/json-api';
 import PageTitleService from 'ember-page-title/services/page-title';
 import config from './config/environment.ts';
 import Router from './router.ts';
+
+export { settled } from '@ember/test-helpers';
 
 setBuildURLConfig({
   host: 'https://pokeapi.co',

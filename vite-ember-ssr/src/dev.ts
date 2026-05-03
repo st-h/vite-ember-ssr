@@ -152,12 +152,33 @@ export function createDevEmberApp(
 ): EmberApp {
   const { ssrLoadModule } = devOptions;
 
+  // Install browser globals once at startup so module-evaluation-time access
+  // (e.g. `@ember/test-helpers` reading `document` at the top level) succeeds
+  // even before the first per-request window is created. The per-request
+  // window below replaces these globals during the actual render.
+  const startupWindow = new Window({
+    url: 'http://localhost/',
+    width: 1024,
+    height: 768,
+    settings: {
+      disableJavaScriptFileLoading: true,
+      disableJavaScriptEvaluation: true,
+      disableCSSFileLoading: true,
+      navigator: { userAgent: 'vite-ember-ssr' },
+    },
+  });
+  installGlobals(startupWindow);
+
   return {
     async renderRoute(
       url: string,
       renderOptions: RenderRouteOptions = {},
     ): Promise<RenderResult> {
-      const { shoebox = false, cssManifest } = renderOptions;
+      const {
+        shoebox = false,
+        cssManifest,
+        settledTimeout = 10_000,
+      } = renderOptions;
 
       // Fresh Window per request — no state bleeds between renders in dev.
       const win = new Window({
@@ -223,6 +244,7 @@ export function createDevEmberApp(
         // Re-load the module on every request so HMR changes are reflected.
         const mod = (await ssrLoadModule(entryPath)) as {
           createSsrApp?: () => EmberApplication;
+          settled?: () => Promise<void>;
         };
         if (typeof mod.createSsrApp !== 'function') {
           throw new Error(
@@ -231,6 +253,8 @@ export function createDevEmberApp(
           );
         }
         const app = mod.createSsrApp();
+        const appSettled =
+          typeof mod.settled === 'function' ? mod.settled : null;
 
         const bootOptions: BootOptions = {
           isBrowser: false,
@@ -242,8 +266,37 @@ export function createDevEmberApp(
 
         const instance = await app.visit(url, bootOptions);
 
-        // Drain Backburner's autorun microtask before reading the DOM.
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        // Wait for the app to settle (test waiters, run loop, pending timers).
+        // Fallback to a microtask drain when the SSR entry doesn't export it.
+        if (appSettled) {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              appSettled(),
+              new Promise<never>((_, reject) => {
+                timer = setTimeout(
+                  () =>
+                    reject(
+                      new Error(
+                        `settled() timed out after ${settledTimeout}ms`,
+                      ),
+                    ),
+                  settledTimeout,
+                );
+              }),
+            ]);
+          } catch (e) {
+            console.warn(
+              `[vite-ember-ssr] settled() did not resolve within ${settledTimeout}ms, ` +
+                `capturing DOM anyway:`,
+              e instanceof Error ? e.message : e,
+            );
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
+        } else {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        }
 
         if (cssManifest) {
           cssLinks = buildRouteCssLinks(cssManifest, instance);
