@@ -242,3 +242,19 @@ describe('SSR shoebox (fetch capture)', () => {
     expect(disabled).not.toContain('id="vite-ember-ssr-shoebox"');
   }, 15_000);
 });
+
+// ─── settled() drains test waiters before DOM capture ────────────────
+
+describe('SSR awaits settled() when the SSR bundle exports it', () => {
+  it('captures post-settled state for routes that register @ember/test-waiters', async () => {
+    // The waiter-test route renders a component that, in its constructor,
+    // registers a waiter and schedules a setTimeout that updates tracked
+    // state and ends the waiter 50ms later. Without `settled()` after
+    // `app.visit()`, the renderer would capture `data-waiter-result=""`.
+    // With it, the waiter blocks DOM capture until the timeout fires.
+    const { html } = await renderRoute('/waiter-test');
+
+    expect(html).toContain('data-component="waiter-check"');
+    expect(html).toContain('data-waiter-result="ok"');
+  });
+});

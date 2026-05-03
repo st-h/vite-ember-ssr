@@ -83,6 +83,11 @@ import EmberApp from 'ember-strict-application-resolver';
 import config from './config/environment.ts';
 import Router from './router.ts';
 
+// Re-exporting `settled` lets the renderer await Ember's run loop, pending
+// timers, and any registered test-waiters before capturing the DOM. See
+// the Concepts section below for details.
+export { settled } from '@ember/test-helpers';
+
 class App extends EmberApp {
   modules = {
     './router': Router,
@@ -170,6 +175,20 @@ This module exports a factory the renderer calls once per worker. The factory mu
 - Pass `autoboot: false` so the app does not try to boot itself when the module loads.
 
 The exported function (named `createSsrApp` by convention) is wrapped in an async function inside the renderer that imports the SSR bundle on demand.
+
+#### Settling
+
+If your `app-ssr.ts` re-exports `settled` from `@ember/test-helpers`, the renderer awaits it after every `app.visit()`:
+
+```ts
+export { settled } from '@ember/test-helpers';
+```
+
+`settled()` waits for Ember's run loop, pending Backburner timers, in-flight AJAX, route transitions, and any registered `@ember/test-waiters` (used by WarpDrive, ember-concurrency, etc.) to drain before the DOM is captured.
+
+Without this export, the renderer falls back to a single microtask drain (`await new Promise(r => setTimeout(r, 0))`), which catches synchronous reactivity but misses async work scheduled outside the microtask queue.
+
+The renderer races `settled()` against a configurable timeout (default 10s). If exceeded, a warning is logged and the DOM is captured anyway. See [`app.renderRoute`](#vite-ember-ssrserver) for `settledTimeout`.
 
 ### Client entry
 
@@ -489,7 +508,7 @@ import {
 ```
 
 - **`createEmberApp(ssrBundlePath, options?)`** creates a long lived tinypool worker pool. Each worker imports the SSR bundle once at startup. Returns an `EmberApp`. Options: `{ workers?: number, recycleWorkerInterval?: number, isolateWorkers?: boolean, dev?: { ssrLoadModule } }`.
-- **`app.renderRoute(url, options?)`** renders a URL path. Returns `{ head, body, statusCode, error }`. Options: `{ shoebox?, cssManifest? }`.
+- **`app.renderRoute(url, options?)`** renders a URL path. Returns `{ head, body, statusCode, error }`. Options: `{ shoebox?, cssManifest?, settledTimeout? }`. `settledTimeout` (default `10000`) bounds how long the renderer waits for the SSR bundle's exported `settled()` to resolve, see [Settling](#settling).
 - **`app.destroy()`** shuts down the worker pool.
 - **`assembleHTML(template, renderResult)`** inserts rendered fragments into the template at the `<!-- VITE_EMBER_SSR_HEAD -->` and `<!-- VITE_EMBER_SSR_BODY -->` markers.
 - **`loadCssManifest(clientDir)`** loads the CSS manifest from the client build output. Returns `undefined` if not present. Used with lazy routes.
