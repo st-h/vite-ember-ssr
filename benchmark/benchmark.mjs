@@ -49,7 +49,7 @@ function getArgList(flag, defaultValue) {
 
 const bundlePath = getArg(
   '--bundle',
-  resolve(repoRoot, 'packages/test-app-combined/dist/server/app-ssr.mjs'),
+  resolve(repoRoot, 'test-apps/test-app-combined/dist/server/app-ssr.mjs'),
 );
 
 const routes = getArgList('--routes', [
@@ -63,10 +63,7 @@ const iterations = parseInt(getArg('--iterations', '3'), 10);
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-const WORKER_PATH = resolve(
-  repoRoot,
-  'packages/vite-ember-ssr/dist/ssr-worker.js',
-);
+const WORKER_PATH = resolve(repoRoot, 'vite-ember-ssr/dist/worker.js');
 
 /** Render a single route in a fresh Worker (current architecture). */
 function renderFresh(url) {
@@ -78,7 +75,6 @@ function renderFresh(url) {
           : `file://${bundlePath}`,
         url,
         shoebox: false,
-        rehydrate: false,
         cssManifest: null,
       },
     });

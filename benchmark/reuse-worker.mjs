@@ -8,9 +8,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const req = createRequire(
-  resolve(__dirname, '../packages/vite-ember-ssr/package.json'),
-);
+const req = createRequire(resolve(__dirname, '../vite-ember-ssr/package.json'));
 const { Window } = req('happy-dom');
 
 const { ssrBundlePath } = workerData;

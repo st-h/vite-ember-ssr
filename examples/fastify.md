@@ -155,19 +155,19 @@ node server.js
 - **`emberApp.destroy()`** shuts down the worker pool. Call it when the server is stopping (e.g. on `SIGTERM`).
 - **`process.chdir(appRoot)`** is required in dev mode — `@embroider/vite` uses `process.cwd()` to locate the Ember app.
 - **`index: false`** on `@fastify/static` prevents it from serving `index.html` for directory requests, which would bypass the SSR handler.
-- **`shoebox: true`** is opt-in — it captures `fetch` responses during SSR and serializes them into the HTML. The client's `installShoebox()` replays them to avoid duplicate API requests. Only needed when your routes fetch data during SSR. See the [Shoebox section](../packages/vite-ember-ssr/README.md#shoebox) in the main README.
+- **`shoebox: true`** is opt-in, it captures `fetch` responses during SSR and serializes them into the HTML. The client's `installShoebox()` replays them to avoid duplicate API requests. Only needed when your routes fetch data during SSR. See the [Shoebox section](../vite-ember-ssr/README.md#shoebox) in the main README.
 - **Always `return reply`** from async Fastify handlers to prevent stream lifecycle issues.
 
-## Rehydration
+## Client boot
 
-By default, SSR uses **cleanup mode** — the server wraps rendered content in boundary markers, and `cleanupSSRContent()` (called from the application template) removes the SSR content when Ember boots. To use **rehydrate mode** instead, pass `rehydrate: true` to `renderRoute()`:
+The library always renders pages with Glimmer rehydration markers. On the client, use `bootRehydrated` to attach Ember to the existing DOM. It falls back to a normal boot when the page was not server rendered (e.g. a dev page hit without an SSR middleware).
 
-```js
-const rendered = await emberApp.renderRoute(request.url, {
-  shoebox: true, // opt-in: only needed if routes fetch data during SSR
-  rehydrate: true,
-});
-const html = assembleHTML(template, rendered);
+```ts
+// app/entry.ts
+import Application from './app.ts';
+import config from './config/environment.ts';
+import { installShoebox, bootRehydrated } from 'vite-ember-ssr/client';
+
+installShoebox();
+bootRehydrated(Application, config);
 ```
-
-In rehydrate mode, the server renders with `_renderMode: 'serialize'`, annotating the DOM with Glimmer markers. The client uses `shouldRehydrate()` from `vite-ember-ssr/client` to detect this and boot accordingly — see the main [README](../packages/vite-ember-ssr/README.md#client-boot-modes) for the full client-side setup. No `cleanupSSRContent` is needed.
