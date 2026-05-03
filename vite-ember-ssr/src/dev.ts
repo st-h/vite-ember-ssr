@@ -66,9 +66,6 @@ const BROWSER_GLOBALS = [
 ] as const;
 
 const SHOEBOX_SCRIPT_ID = 'vite-ember-ssr-shoebox';
-const SSR_BODY_START =
-  '<script type="x/boundary" id="ssr-body-start"></script>';
-const SSR_BODY_END = '<script type="x/boundary" id="ssr-body-end"></script>';
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -160,7 +157,7 @@ export function createDevEmberApp(
       url: string,
       renderOptions: RenderRouteOptions = {},
     ): Promise<RenderResult> {
-      const { shoebox = false, rehydrate = false, cssManifest } = renderOptions;
+      const { shoebox = false, cssManifest } = renderOptions;
 
       // Fresh Window per request — no state bleeds between renders in dev.
       const win = new Window({
@@ -240,7 +237,7 @@ export function createDevEmberApp(
           document: document as unknown as Document,
           rootElement: document.body as unknown as Element,
           shouldRender: true,
-          ...(rehydrate ? { _renderMode: 'serialize' as const } : {}),
+          _renderMode: 'serialize',
         };
 
         const instance = await app.visit(url, bootOptions);
@@ -267,17 +264,13 @@ export function createDevEmberApp(
         shoeboxEntries && shoeboxEntries.size > 0
           ? serializeShoebox(Array.from(shoeboxEntries.values()))
           : '';
-      const rehydrateHTML = rehydrate
-        ? '<script>window.__vite_ember_ssr_rehydrate__=true</script>'
-        : '';
+      const rehydrateHTML =
+        '<script>window.__vite_ember_ssr_rehydrate__=true</script>';
       const fullHead = cssLinks + rehydrateHTML + shoeboxHTML + head;
-      const wrappedBody = rehydrate
-        ? body
-        : `${SSR_BODY_START}${body}${SSR_BODY_END}`;
 
       return {
         head: fullHead,
-        body: wrappedBody,
+        body,
         statusCode: error ? 500 : 200,
         ...(error ? { error } : {}),
       };

@@ -47,16 +47,6 @@ export interface RenderRouteOptions {
   shoebox?: boolean;
 
   /**
-   * Enable Glimmer VM rehydration mode.
-   *
-   * When true, the server renders with `_renderMode: 'serialize'`,
-   * annotating the DOM with markers Glimmer can reuse on the client.
-   *
-   * @default false
-   */
-  rehydrate?: boolean;
-
-  /**
    * CSS manifest mapping route names to their associated CSS asset paths.
    *
    * Generated automatically by the `emberSsr()` Vite plugin during the
@@ -274,7 +264,6 @@ export async function createEmberApp(
         ssrBundlePath: bundleURL,
         url,
         shoebox: renderOptions.shoebox ?? false,
-        rehydrate: renderOptions.rehydrate ?? false,
         cssManifest: renderOptions.cssManifest ?? null,
       })) as {
         head: string;

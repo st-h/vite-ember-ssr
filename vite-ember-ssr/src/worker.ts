@@ -31,7 +31,6 @@ export interface WorkerRenderOptions {
   ssrBundlePath: string;
   url: string;
   shoebox: boolean;
-  rehydrate: boolean;
   cssManifest: CssManifest | null;
 }
 
@@ -207,7 +206,7 @@ function buildRouteCssLinks(
 export default async function render(
   options: WorkerRenderOptions,
 ): Promise<WorkerRenderResult> {
-  const { url, shoebox, rehydrate, cssManifest } = options;
+  const { url, shoebox, cssManifest } = options;
 
   // Use the long-lived document directly — no new Window, no globalThis swap.
   const document = win.document;
@@ -228,7 +227,7 @@ export default async function render(
       document: document as unknown as Document,
       rootElement: document.body as unknown as Element,
       shouldRender: true,
-      ...(rehydrate ? { _renderMode: 'serialize' as const } : {}),
+      _renderMode: 'serialize',
     };
 
     const instance = await app.visit(url, bootOptions);
@@ -246,11 +245,9 @@ export default async function render(
     // remain live and can corrupt the next visit.
     instance.destroy();
 
-    // rehydrate mode causes left over rehydration markers to remain in the DOM, so
-    // we clear the body to ensure a clean slate for the next render.
-    if (rehydrate) {
-      document.body.innerHTML = '';
-    }
+    // Serialize mode leaves rehydration markers in the DOM, so we clear
+    // the body to ensure a clean slate for the next render.
+    document.body.innerHTML = '';
   } catch (e) {
     error = e instanceof Error ? e : new Error(String(e));
   }
@@ -259,17 +256,13 @@ export default async function render(
     shoeboxEntries && shoeboxEntries.size > 0
       ? serializeShoebox(Array.from(shoeboxEntries.values()))
       : '';
-  const rehydrateHTML = rehydrate
-    ? '<script>window.__vite_ember_ssr_rehydrate__=true</script>'
-    : '';
+  const rehydrateHTML =
+    '<script>window.__vite_ember_ssr_rehydrate__=true</script>';
   const fullHead = cssLinks + rehydrateHTML + shoeboxHTML + head;
-  const wrappedBody = rehydrate
-    ? body
-    : `<script type="x/boundary" id="ssr-body-start"></script>${body}<script type="x/boundary" id="ssr-body-end"></script>`;
 
   return {
     head: fullHead,
-    body: wrappedBody,
+    body,
     statusCode: error ? 500 : 200,
     ...(error
       ? { error: error.message + (error.stack ? '\n' + error.stack : '') }
