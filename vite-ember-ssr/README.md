@@ -576,20 +576,20 @@ import {
 
 This repo contains the library and a set of test apps that exercise it.
 
-| Path                                  | Description                                |
-| ------------------------------------- | ------------------------------------------ |
-| `vite-ember-ssr/`                     | Core library and test suites               |
-| `test-apps/test-app/`                 | Ember test app (SSR)                       |
-| `test-apps/test-app-ssg/`             | Ember test app (SSG)                       |
-| `test-apps/test-app-combined/`        | Ember test app (SSR + SSG)                 |
-| `test-apps/test-app-lazy-ssr/`        | Ember test app (SSR + lazy routes)         |
-| `test-apps/test-app-lazy-ssg/`        | Ember test app (SSG + lazy routes)         |
-| `test-apps/test-app-monorepo-ssr/`    | Ember test app consuming a monorepo lib    |
-| `test-apps/test-app-monorepo-ssg/`    | Same, for SSG                              |
-| `test-apps/test-app-ssr-loading-substate/` | Loading substate behaviour (SSR)      |
-| `test-apps/test-app-ssg-loading-substate/` | Loading substate behaviour (SSG)      |
-| `test-apps/monorepo-lib/`             | Shared library used by the monorepo apps   |
-| `test-apps/test-server/`              | Fastify SSR server                         |
+| Path                                       | Description                              |
+| ------------------------------------------ | ---------------------------------------- |
+| `vite-ember-ssr/`                          | Core library and test suites             |
+| `test-apps/test-app/`                      | Ember test app (SSR)                     |
+| `test-apps/test-app-ssg/`                  | Ember test app (SSG)                     |
+| `test-apps/test-app-combined/`             | Ember test app (SSR + SSG)               |
+| `test-apps/test-app-lazy-ssr/`             | Ember test app (SSR + lazy routes)       |
+| `test-apps/test-app-lazy-ssg/`             | Ember test app (SSG + lazy routes)       |
+| `test-apps/test-app-monorepo-ssr/`         | Ember test app consuming a monorepo lib  |
+| `test-apps/test-app-monorepo-ssg/`         | Same, for SSG                            |
+| `test-apps/test-app-ssr-loading-substate/` | Loading substate behaviour (SSR)         |
+| `test-apps/test-app-ssg-loading-substate/` | Loading substate behaviour (SSG)         |
+| `test-apps/monorepo-lib/`                  | Shared library used by the monorepo apps |
+| `test-apps/test-server/`                   | Fastify SSR server                       |
 
 Top level scripts:
 

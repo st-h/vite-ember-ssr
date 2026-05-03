@@ -33,9 +33,9 @@ describe('SSG output structure', () => {
   it('writes non-index routes to <route>/index.html', async () => {
     // 'about' → about/index.html, 'pokemon-fetch' → pokemon-fetch/index.html
     expect(await fileExists(resolve(ssgDist, 'about/index.html'))).toBe(true);
-    expect(
-      await fileExists(resolve(ssgDist, 'pokemon-fetch/index.html')),
-    ).toBe(true);
+    expect(await fileExists(resolve(ssgDist, 'pokemon-fetch/index.html'))).toBe(
+      true,
+    );
   });
 
   it('emits the client assets directory', async () => {
@@ -107,9 +107,7 @@ describe('SSG isolates each prerender despite shared worker', () => {
   it('each page has only its own data-route attribute', async () => {
     const routes = ['index', 'about', 'contact', 'pokemon-fetch'];
     const htmls = Object.fromEntries(
-      await Promise.all(
-        routes.map(async (r) => [r, await readSsgHtml(r)]),
-      ),
+      await Promise.all(routes.map(async (r) => [r, await readSsgHtml(r)])),
     );
 
     for (const route of routes) {

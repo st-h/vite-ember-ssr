@@ -119,17 +119,18 @@ test.describe('SSR with fetched data is fully present without JS', () => {
 // ─── Shoebox: client-side fetch replay ───────────────────────────────
 
 test.describe('Shoebox prevents duplicate fetches on first client load', () => {
-  test('shoebox script tag is present in SSR HTML and removed after boot', async ({
-    page,
-  }) => {
+  test('shoebox script tag is present in SSR HTML', async ({ page }) => {
+    // Block JS so installShoebox() does not consume the tag before we read it
+    await page.route('**/*.js', (route) => route.abort());
+
     await page.goto('/pokemon-fetch');
 
-    // Before boot, with JS blocked, the shoebox tag is present
-    await expect(page.locator('#vite-ember-ssr-shoebox')).toBeAttached({
-      timeout: 5_000,
-    });
+    await expect(page.locator('#vite-ember-ssr-shoebox')).toBeAttached();
+  });
 
-    // After boot, installShoebox() consumes and removes the tag
+  test('shoebox script tag is removed after client boot', async ({ page }) => {
+    await page.goto('/pokemon-fetch');
+
     await page.waitForFunction(
       () => document.body.classList.contains('ember-application'),
       { timeout: 15_000 },
