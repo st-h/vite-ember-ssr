@@ -6,9 +6,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const bundleURL =
   'file://' +
-  resolve(repoRoot, 'packages/test-app-combined/dist/server/app-ssr.mjs');
+  resolve(repoRoot, 'test-apps/test-app-combined/dist/server/app-ssr.mjs');
 const REUSE = resolve(__dirname, 'reuse-worker.mjs');
-const FRESH = resolve(repoRoot, 'packages/vite-ember-ssr/dist/ssr-worker.js');
+const FRESH = resolve(repoRoot, 'vite-ember-ssr/dist/worker.js');
 
 function makeReuse() {
   const w = new Worker(REUSE, { workerData: { ssrBundlePath: bundleURL } });
@@ -40,7 +40,6 @@ function renderFresh(url) {
         ssrBundlePath: bundleURL,
         url,
         shoebox: false,
-        rehydrate: false,
         cssManifest: null,
       },
     });
@@ -53,12 +52,6 @@ function renderFresh(url) {
       rej(e);
     });
   });
-}
-
-function strip(body) {
-  return body
-    .replace('<script type="x/boundary" id="ssr-body-start"></script>', '')
-    .replace('<script type="x/boundary" id="ssr-body-end"></script>', '');
 }
 
 function firstDiff(a, b) {
@@ -87,8 +80,7 @@ await rw.render('/');
 for (const url of routes) {
   const r = await rw.render(url);
   const f = await renderFresh(url);
-  const freshBody = strip(f.body);
-  const diff = firstDiff(r.body, freshBody);
+  const diff = firstDiff(r.body, f.body);
   if (diff) {
     console.log('\n' + url, '— MISMATCH at char', diff.pos);
     console.log('reused:', diff.reused);

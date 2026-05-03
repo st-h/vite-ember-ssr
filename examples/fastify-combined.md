@@ -163,34 +163,22 @@ node server.js
 - **`createEmberApp(ssrBundlePath)`** creates a tinypool worker pool at startup. Call it once — not per-request.
 - **`_template.html`** — When `emberSsg` detects `emberSsr` in the same config, it preserves the original `index.html` as `_template.html` before overwriting it with prerendered content. Your server reads this file for dynamic SSR.
 - **`index: false`** on `@fastify/static` prevents it from serving `index.html` for directory requests, which would bypass the catch-all handler.
-- **`shoebox: true`** is opt-in — it captures `fetch` responses during dynamic SSR and serializes them into the HTML. The client's `installShoebox()` replays them to avoid duplicate API requests. Only needed when your routes fetch data during SSR. See the [Shoebox section](../packages/vite-ember-ssr/README.md#shoebox) in the main README.
+- **`shoebox: true`** is opt-in, it captures `fetch` responses during dynamic SSR and serializes them into the HTML. The client's `installShoebox()` replays them to avoid duplicate API requests. Only needed when your routes fetch data during SSR. See the [Shoebox section](../vite-ember-ssr/README.md#shoebox) in the main README.
 - **Always `return reply`** from async Fastify handlers to prevent stream lifecycle issues.
 
-## Rehydration
+## Client boot
 
-Both the SSG prerender and the dynamic SSR fallback support rehydrate mode independently.
+The library always renders pages with Glimmer rehydration markers, both in the SSG prerender and the dynamic SSR fallback. On the client, use `bootRehydrated` to attach Ember to the existing DOM. It falls back to a normal boot if the current page was not server rendered.
 
-**SSG prerender:** pass `rehydrate: true` to `emberSsg()` in your Vite config. The prerendered HTML files will include Glimmer serialization markers instead of boundary markers. Add `shoebox: true` if routes fetch data during prerendering.
+```ts
+// app/entry.ts
+import Application from './app.ts';
+import config from './config/environment.ts';
+import { installShoebox, bootRehydrated } from 'vite-ember-ssr/client';
 
-```js
-// vite.config.mjs
-emberSsg({
-  routes: ['index', 'about', 'contact'],
-  rehydrate: true,
-}),
+installShoebox();
+bootRehydrated(Application, config);
 ```
-
-**Dynamic SSR fallback:** pass `rehydrate: true` to `renderRoute()` in your server:
-
-```js
-const rendered = await emberApp.renderRoute(url, {
-  shoebox: true, // opt-in: only needed if routes fetch data during SSR
-  rehydrate: true,
-});
-const html = assembleHTML(ssrTemplate, rendered);
-```
-
-You can use the same mode for both (simplest), or mix them — e.g., rehydrate for prerendered pages and cleanup for dynamic SSR, or vice versa. If both use the same mode, the client entry is straightforward. If they differ, the client uses `shouldRehydrate()` from `vite-ember-ssr/client` to detect which mode was used and boot accordingly. See the main [README](../packages/vite-ember-ssr/README.md#client-boot-modes) for full details on both client boot modes.
 
 ## Build output reference
 

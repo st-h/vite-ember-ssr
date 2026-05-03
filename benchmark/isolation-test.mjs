@@ -11,15 +11,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
 const bundlePath = resolve(
   repoRoot,
-  'packages/test-app-combined/dist/server/app-ssr.mjs',
+  'test-apps/test-app-combined/dist/server/app-ssr.mjs',
 );
 const bundleURL = `file://${bundlePath}`;
 
 const REUSE_WORKER_PATH = resolve(__dirname, 'reuse-worker.mjs');
-const FRESH_WORKER_PATH = resolve(
-  repoRoot,
-  'packages/vite-ember-ssr/dist/ssr-worker.js',
-);
+const FRESH_WORKER_PATH = resolve(repoRoot, 'vite-ember-ssr/dist/worker.js');
 
 function makeReuseWorker() {
   const w = new Worker(REUSE_WORKER_PATH, {
@@ -55,7 +52,6 @@ function renderFresh(url) {
         ssrBundlePath: bundleURL,
         url,
         shoebox: false,
-        rehydrate: false,
         cssManifest: null,
       },
     });

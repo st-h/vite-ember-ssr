@@ -19,7 +19,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createEmberApp } from '../packages/vite-ember-ssr/dist/server.js';
+import { createEmberApp } from '../vite-ember-ssr/dist/server.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..');
@@ -34,13 +34,13 @@ const ROUTES = ['/', '/about', '/contact'];
 const APPS = {
   eager: {
     label: 'test-app (eager bundle)',
-    dist: resolve(repoRoot, 'packages/test-app/dist'),
+    dist: resolve(repoRoot, 'test-apps/test-app/dist'),
     bundle: 'server/app-ssr.mjs',
     template: 'client/index.html',
   },
   lazy: {
     label: 'test-app-lazy-ssr (lazy/code-split bundle)',
-    dist: resolve(repoRoot, 'packages/test-app-lazy-ssr/dist'),
+    dist: resolve(repoRoot, 'test-apps/test-app-lazy-ssr/dist'),
     bundle: 'server/app-ssr.mjs',
     template: 'client/index.html',
   },
