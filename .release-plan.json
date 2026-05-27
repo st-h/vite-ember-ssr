@@ -2,8 +2,8 @@
   "solution": {
     "vite-ember-ssr": {
       "impact": "minor",
-      "oldVersion": "0.1.0-alpha.13",
-      "newVersion": "0.1.0",
+      "oldVersion": "0.1.0",
+      "newVersion": "0.2.0",
       "tagName": "latest",
       "constraints": [
         {
@@ -14,5 +14,5 @@
       "pkgJSONPath": "./vite-ember-ssr/package.json"
     }
   },
-  "description": "## Release (2026-05-03)\n\n* vite-ember-ssr 0.1.0 (minor)\n\n#### :rocket: Enhancement\n* `vite-ember-ssr`\n  * [#6](https://github.com/evoactivity/vite-ember-ssr/pull/6) feat: extract and apply body element attributes from SSR rendering ([@st-h](https://github.com/st-h))\n  * [#9](https://github.com/evoactivity/vite-ember-ssr/pull/9) Use settled if exported from app-ssr.ts ([@evoactivity](https://github.com/evoactivity))\n  * [#8](https://github.com/evoactivity/vite-ember-ssr/pull/8) Rehydrate Only ([@evoactivity](https://github.com/evoactivity))\n\n#### Committers: 2\n- Liam ([@evoactivity](https://github.com/evoactivity))\n- Steve ([@st-h](https://github.com/st-h))\n"
+  "description": "## Release (2026-05-27)\n\n* vite-ember-ssr 0.2.0 (minor)\n\n#### :rocket: Enhancement\n* `vite-ember-ssr`\n  * [#11](https://github.com/evoactivity/vite-ember-ssr/pull/11) Update peer dependency for vite to include version 8 ([@NullVoxPopuli](https://github.com/NullVoxPopuli))\n\n#### Committers: 1\n- [@NullVoxPopuli](https://github.com/NullVoxPopuli)\n"
 }
