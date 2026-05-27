@@ -23,11 +23,11 @@ import type {
   EmberApplicationInstance,
   BootOptions,
   ShoeboxEntry,
-  ForwardedHeader,
+  ForwardedCookie,
 } from './server.js';
 import {
   compose,
-  forwardHeadersMiddleware,
+  forwardCookieMiddleware,
   shoeboxMiddleware,
 } from './fetch-middleware.js';
 
@@ -39,7 +39,7 @@ export interface WorkerRenderOptions {
   shoebox: boolean;
   cssManifest: CssManifest | null;
   settledTimeout: number;
-  headers: Record<string, ForwardedHeader> | null;
+  forwardCookie: ForwardedCookie | null;
 }
 
 export interface WorkerRenderResult {
@@ -142,16 +142,16 @@ const appSettled: (() => Promise<void>) | null =
 const SHOEBOX_SCRIPT_ID = 'vite-ember-ssr-shoebox';
 
 // The fetch pipeline is installed once at startup. globalThis.fetch never
-// changes. Per-render state (shoebox entries, forwarded headers) lives in
+// changes. Per-render state (shoebox entries, forwarded cookie) lives in
 // module-level variables that the middlewares read via getters.
 const realFetch = globalThis.fetch;
-let shoeboxEntries: Map<string, ShoeboxEntry> | null = null;
-let forwardedHeaders: Record<string, ForwardedHeader> | null = null;
+let activeShoebox: Map<string, ShoeboxEntry> | null = null;
+let activeCookie: ForwardedCookie | null = null;
 
 const fetchWithMiddleware = compose(
   [
-    forwardHeadersMiddleware(() => forwardedHeaders),
-    shoeboxMiddleware(() => shoeboxEntries),
+    forwardCookieMiddleware(() => activeCookie),
+    shoeboxMiddleware(() => activeShoebox),
   ],
   (request) => realFetch(request),
 );
@@ -235,15 +235,15 @@ async function awaitSettled(timeoutMs: number): Promise<void> {
 export default async function render(
   options: WorkerRenderOptions,
 ): Promise<WorkerRenderResult> {
-  const { url, shoebox, cssManifest, settledTimeout, headers } = options;
+  const { url, shoebox, cssManifest, settledTimeout, forwardCookie } = options;
 
   // Use the long-lived document directly — no new Window, no globalThis swap.
   const document = win.document;
 
   // Set per-render state. The middlewares read these via getters, so a
   // single shared pipeline can serve every render without re-installation.
-  shoeboxEntries = shoebox ? new Map() : null;
-  forwardedHeaders = headers;
+  activeShoebox = shoebox ? new Map() : null;
+  activeCookie = forwardCookie;
 
   let head = '';
   let body = '';
@@ -285,13 +285,13 @@ export default async function render(
   }
 
   const shoeboxHTML =
-    shoeboxEntries && shoeboxEntries.size > 0
-      ? serializeShoebox(Array.from(shoeboxEntries.values()))
+    activeShoebox && activeShoebox.size > 0
+      ? serializeShoebox(Array.from(activeShoebox.values()))
       : '';
 
   // Clear per-render state so a stray late fetch can't see stale config.
-  shoeboxEntries = null;
-  forwardedHeaders = null;
+  activeShoebox = null;
+  activeCookie = null;
   const rehydrateHTML =
     '<script>window.__vite_ember_ssr_rehydrate__=true</script>';
   const fullHead = cssLinks + rehydrateHTML + shoeboxHTML + head;

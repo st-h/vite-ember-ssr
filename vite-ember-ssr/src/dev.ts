@@ -32,13 +32,13 @@ import type {
   RenderRouteOptions,
   RenderResult,
   ShoeboxEntry,
-  ForwardedHeader,
+  ForwardedCookie,
   EmberApp,
   EmberAppDevOptions,
 } from './server.js';
 import {
   compose,
-  forwardHeadersMiddleware,
+  forwardCookieMiddleware,
   shoeboxMiddleware,
 } from './fetch-middleware.js';
 
@@ -184,7 +184,7 @@ export function createDevEmberApp(
         shoebox = false,
         cssManifest,
         settledTimeout = 10_000,
-        headers: forwardedHeaders,
+        forwardCookie,
       } = renderOptions;
 
       // Fresh Window per request — no state bleeds between renders in dev.
@@ -208,14 +208,13 @@ export function createDevEmberApp(
       const shoeboxEntries: Map<string, ShoeboxEntry> | null = shoebox
         ? new Map()
         : null;
-      const headerScopes: Record<string, ForwardedHeader> | null =
-        forwardedHeaders ?? null;
-      const middlewareActive = shoeboxEntries !== null || headerScopes !== null;
+      const cookie: ForwardedCookie | null = forwardCookie ?? null;
+      const middlewareActive = shoeboxEntries !== null || cookie !== null;
 
       if (middlewareActive) {
         globalThis.fetch = compose(
           [
-            forwardHeadersMiddleware(() => headerScopes),
+            forwardCookieMiddleware(() => cookie),
             shoeboxMiddleware(() => shoeboxEntries),
           ],
           (request) => realFetch(request),

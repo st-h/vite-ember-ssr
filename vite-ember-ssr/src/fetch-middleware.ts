@@ -7,10 +7,10 @@
  * request, await `next(req)`, and inspect/modify the response.
  *
  * Two middlewares ship with the library:
- *  - `forwardHeadersMiddleware` — injects per-host-scoped request headers
- *    (e.g., cookies, authorization) into outbound fetches, so SSR can
- *    make authenticated calls on behalf of the user without leaking
- *    credentials to third-party hosts.
+ *  - `forwardCookieMiddleware` — injects the incoming request's `Cookie`
+ *    header into outbound fetches whose host appears in `allowedHosts`,
+ *    so SSR can make authenticated calls on behalf of the user without
+ *    leaking the session cookie to third-party hosts.
  *  - `shoeboxMiddleware` — captures GET responses into a per-render
  *    Map so they can be serialized into the HTML for the client to
  *    replay during rehydration.
@@ -20,7 +20,7 @@
  * closure-captured state.
  */
 
-import type { ShoeboxEntry, ForwardedHeader } from './server.js';
+import type { ShoeboxEntry, ForwardedCookie } from './server.js';
 
 export type FetchMiddleware = (
   request: Request,
@@ -50,36 +50,31 @@ export function compose(
 }
 
 /**
- * Middleware that injects per-host-scoped request headers into outbound
- * fetches. Headers are only added when `URL.host` exactly matches one of
- * the header's `allowedHosts`. Headers already set on the request (by
- * app code) are not overwritten.
+ * Middleware that injects the incoming request's `Cookie` header into
+ * outbound fetches. The cookie is only added when `URL.host` exactly
+ * matches one of `allowedHosts`. A cookie header already set on the
+ * request (by app code) is not overwritten.
  *
- * Applies to all HTTP methods — auth headers must flow on POST/PUT too.
+ * Applies to all HTTP methods — auth cookies must flow on POST/PUT too.
  *
- * @param getScopes Function returning the active per-render header map,
- *   or `null` when no headers are configured for this render.
+ * @param getCookie Function returning the active per-render cookie
+ *   config, or `null` when forwarding is disabled for this render.
  */
-export function forwardHeadersMiddleware(
-  getScopes: () => Record<string, ForwardedHeader> | null,
+export function forwardCookieMiddleware(
+  getCookie: () => ForwardedCookie | null,
 ): FetchMiddleware {
   return (request, next) => {
-    const scopes = getScopes();
-    if (!scopes) return next(request);
+    const cookie = getCookie();
+    if (!cookie) return next(request);
 
     const url = new URL(request.url);
+    if (!cookie.allowedHosts.includes(url.host)) return next(request);
+
+    // Don't overwrite a cookie explicitly set by app code.
+    if (request.headers.has('cookie')) return next(request);
+
     const merged = new Headers(request.headers);
-    let modified = false;
-
-    for (const [name, { value, allowedHosts }] of Object.entries(scopes)) {
-      if (!allowedHosts.includes(url.host)) continue;
-      // Don't overwrite headers explicitly set by app code.
-      if (merged.has(name)) continue;
-      merged.set(name, value);
-      modified = true;
-    }
-
-    if (!modified) return next(request);
+    merged.set('cookie', cookie.value);
     return next(new Request(request, { headers: merged }));
   };
 }

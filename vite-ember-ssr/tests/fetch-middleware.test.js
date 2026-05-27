@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   compose,
-  forwardHeadersMiddleware,
+  forwardCookieMiddleware,
   shoeboxMiddleware,
 } from '../src/fetch-middleware.ts';
 
@@ -45,41 +45,37 @@ describe('compose', () => {
   });
 });
 
-// ─── forwardHeadersMiddleware ────────────────────────────────────────
+// ─── forwardCookieMiddleware ─────────────────────────────────────────
 
-describe('forwardHeadersMiddleware', () => {
-  function runWith(scopes, request) {
+describe('forwardCookieMiddleware', () => {
+  function runWith(cookie, request, init) {
     const captured = { request: null };
     const terminal = async (req) => {
       captured.request = req;
       return new Response('ok');
     };
-    const fn = compose([forwardHeadersMiddleware(() => scopes)], terminal);
-    return fn(request).then(() => captured.request);
+    const fn = compose([forwardCookieMiddleware(() => cookie)], terminal);
+    return fn(request, init).then(() => captured.request);
   }
 
-  it('passes through unchanged when no scopes are configured', async () => {
+  it('passes through unchanged when no cookie is configured', async () => {
     const req = await runWith(null, 'https://api.example.com/x');
 
     expect(req.headers.has('cookie')).toBe(false);
   });
 
-  it('injects a header when the request host matches allowedHosts', async () => {
+  it('injects the cookie when the request host matches allowedHosts', async () => {
     const req = await runWith(
-      {
-        cookie: { value: 'session=abc', allowedHosts: ['api.example.com'] },
-      },
+      { value: 'session=abc', allowedHosts: ['api.example.com'] },
       'https://api.example.com/x',
     );
 
     expect(req.headers.get('cookie')).toBe('session=abc');
   });
 
-  it('does NOT inject a header when the host is not in allowedHosts', async () => {
+  it('does NOT inject the cookie when the host is not in allowedHosts', async () => {
     const req = await runWith(
-      {
-        cookie: { value: 'session=abc', allowedHosts: ['api.example.com'] },
-      },
+      { value: 'session=abc', allowedHosts: ['api.example.com'] },
       'https://pokeapi.co/api/v2/pokemon/pikachu',
     );
 
@@ -88,18 +84,14 @@ describe('forwardHeadersMiddleware', () => {
 
   it('matches host with port (URL.host semantics)', async () => {
     const matched = await runWith(
-      {
-        cookie: { value: 'v', allowedHosts: ['api.example.com:8080'] },
-      },
+      { value: 'v', allowedHosts: ['api.example.com:8080'] },
       'https://api.example.com:8080/x',
     );
     expect(matched.headers.get('cookie')).toBe('v');
 
     // Different port → no match
     const notMatched = await runWith(
-      {
-        cookie: { value: 'v', allowedHosts: ['api.example.com:8080'] },
-      },
+      { value: 'v', allowedHosts: ['api.example.com:8080'] },
       'https://api.example.com/x',
     );
     expect(notMatched.headers.has('cookie')).toBe(false);
@@ -108,72 +100,32 @@ describe('forwardHeadersMiddleware', () => {
   it('does NOT do suffix matching (subdomain attacker scenario)', async () => {
     // 'evil-api.example.com' must not satisfy a rule for 'example.com'
     const req = await runWith(
-      {
-        cookie: { value: 'v', allowedHosts: ['example.com'] },
-      },
+      { value: 'v', allowedHosts: ['example.com'] },
       'https://evil-api.example.com/x',
     );
 
     expect(req.headers.has('cookie')).toBe(false);
   });
 
-  it('does not overwrite a header explicitly set on the request', async () => {
-    const captured = { request: null };
-    const terminal = async (req) => {
-      captured.request = req;
-      return new Response('ok');
-    };
-    const scopes = {
-      cookie: { value: 'forwarded', allowedHosts: ['api.example.com'] },
-    };
-    const fn = compose([forwardHeadersMiddleware(() => scopes)], terminal);
+  it('does not overwrite a cookie explicitly set on the request', async () => {
+    const req = await runWith(
+      { value: 'forwarded', allowedHosts: ['api.example.com'] },
+      'https://api.example.com/x',
+      { headers: { cookie: 'app-set' } },
+    );
 
-    await fn('https://api.example.com/x', {
-      headers: { cookie: 'app-set' },
-    });
-
-    expect(captured.request.headers.get('cookie')).toBe('app-set');
+    expect(req.headers.get('cookie')).toBe('app-set');
   });
 
-  it('scopes each header independently (per-header allowedHosts)', async () => {
-    const scopes = {
-      cookie: { value: 'session=abc', allowedHosts: ['api.example.com'] },
-      authorization: {
-        value: 'Bearer xyz',
-        allowedHosts: ['auth.example.com'],
-      },
-    };
+  it('forwards the cookie on non-GET methods too', async () => {
+    const req = await runWith(
+      { value: 'session=abc', allowedHosts: ['api.example.com'] },
+      'https://api.example.com/submit',
+      { method: 'POST', body: 'payload' },
+    );
 
-    const apiReq = await runWith(scopes, 'https://api.example.com/x');
-    expect(apiReq.headers.get('cookie')).toBe('session=abc');
-    expect(apiReq.headers.has('authorization')).toBe(false);
-
-    const authReq = await runWith(scopes, 'https://auth.example.com/x');
-    expect(authReq.headers.has('cookie')).toBe(false);
-    expect(authReq.headers.get('authorization')).toBe('Bearer xyz');
-  });
-
-  it('forwards headers on non-GET methods too', async () => {
-    const captured = { request: null };
-    const terminal = async (req) => {
-      captured.request = req;
-      return new Response('ok');
-    };
-    const scopes = {
-      authorization: {
-        value: 'Bearer xyz',
-        allowedHosts: ['api.example.com'],
-      },
-    };
-    const fn = compose([forwardHeadersMiddleware(() => scopes)], terminal);
-
-    await fn('https://api.example.com/submit', {
-      method: 'POST',
-      body: 'payload',
-    });
-
-    expect(captured.request.method).toBe('POST');
-    expect(captured.request.headers.get('authorization')).toBe('Bearer xyz');
+    expect(req.method).toBe('POST');
+    expect(req.headers.get('cookie')).toBe('session=abc');
   });
 });
 
@@ -227,19 +179,20 @@ describe('shoeboxMiddleware', () => {
 // ─── Pipeline order ──────────────────────────────────────────────────
 
 describe('pipeline ordering', () => {
-  it('shoebox captures the request as modified by forwardHeaders', async () => {
-    // forwardHeaders runs first, so the shoebox sees the request with
-    // forwarded headers attached. This matches what the real fetch will see.
+  it('shoebox captures the request as modified by forwardCookie', async () => {
+    // forwardCookie runs first, so the shoebox sees the request with the
+    // cookie attached. This matches what the real fetch will see.
     const entries = new Map();
-    let observedHeaderInTerminal;
+    let observedCookieInTerminal;
     const terminal = async (req) => {
-      observedHeaderInTerminal = req.headers.get('cookie');
+      observedCookieInTerminal = req.headers.get('cookie');
       return new Response('body');
     };
     const fn = compose(
       [
-        forwardHeadersMiddleware(() => ({
-          cookie: { value: 'forwarded', allowedHosts: ['api.example.com'] },
+        forwardCookieMiddleware(() => ({
+          value: 'forwarded',
+          allowedHosts: ['api.example.com'],
         })),
         shoeboxMiddleware(() => entries),
       ],
@@ -248,7 +201,7 @@ describe('pipeline ordering', () => {
 
     await fn('https://api.example.com/x');
 
-    expect(observedHeaderInTerminal).toBe('forwarded');
+    expect(observedCookieInTerminal).toBe('forwarded');
     expect(entries.size).toBe(1);
   });
 });

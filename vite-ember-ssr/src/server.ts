@@ -40,20 +40,20 @@ export interface BootOptions {
 }
 
 /**
- * A header to forward to fetch() calls made during SSR rendering, scoped
- * to a fixed set of destination hosts.
+ * Configures forwarding of the incoming request's `Cookie` header to
+ * fetch() calls made during SSR rendering.
  *
- * `allowedHosts` is required: forwarding `Cookie` or `Authorization` to
- * every outbound fetch would leak credentials to third-party APIs the
- * route happens to call. Each entry in `allowedHosts` is matched against
- * the request URL's `host` (hostname plus port) using exact equality —
- * suffix wildcards are not supported.
+ * `allowedHosts` is required: forwarding the session cookie to every
+ * outbound fetch would leak credentials to third-party APIs the route
+ * happens to call. Each entry is matched against the request URL's
+ * `host` (hostname plus port) using exact equality — suffix wildcards
+ * are not supported.
  */
-export interface ForwardedHeader {
-  /** Header value to inject (e.g., the cookie string from the incoming request). */
+export interface ForwardedCookie {
+  /** Cookie header value from the incoming request. */
   value: string;
   /**
-   * Hosts (`URL.host`) the header may be sent to. Exact match, no wildcards.
+   * Hosts (`URL.host`) the cookie may be sent to. Exact match, no wildcards.
    *
    * @example ['api.example.com', 'auth.example.com:8080']
    */
@@ -89,32 +89,22 @@ export interface RenderRouteOptions {
   settledTimeout?: number;
 
   /**
-   * HTTP headers from the incoming request to forward to fetch() calls
-   * made during SSR rendering. Each header specifies the destination
-   * hosts it may be sent to.
-   *
-   * Use this to forward authentication cookies, authorization tokens, or
-   * other request-scoped headers so the SSR render can make authenticated
-   * API calls on behalf of the user — without leaking credentials to
-   * third-party APIs the same route may also call.
+   * Forward the incoming request's `Cookie` header to fetch() calls made
+   * during SSR rendering. The cookie is only sent to hosts listed in
+   * `allowedHosts`, so credentials never leak to third-party APIs the
+   * route may also call.
    *
    * @example
    * ```js
    * await app.renderRoute(req.url, {
-   *   headers: {
-   *     cookie: {
-   *       value: req.headers.cookie ?? '',
-   *       allowedHosts: ['api.example.com'],
-   *     },
-   *     authorization: {
-   *       value: req.headers.authorization ?? '',
-   *       allowedHosts: ['auth.example.com'],
-   *     },
+   *   forwardCookie: {
+   *     value: req.headers.cookie ?? '',
+   *     allowedHosts: ['api.example.com'],
    *   },
    * });
    * ```
    */
-  headers?: Record<string, ForwardedHeader>;
+  forwardCookie?: ForwardedCookie;
 }
 
 export interface RenderResult {
@@ -328,7 +318,7 @@ export async function createEmberApp(
         shoebox: renderOptions.shoebox ?? false,
         cssManifest: renderOptions.cssManifest ?? null,
         settledTimeout: renderOptions.settledTimeout ?? 10_000,
-        headers: renderOptions.headers ?? null,
+        forwardCookie: renderOptions.forwardCookie ?? null,
       })) as {
         head: string;
         body: string;
