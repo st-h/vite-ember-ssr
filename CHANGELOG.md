@@ -1,5 +1,16 @@
 # Changelog
 
+## Release (2026-05-29)
+
+* vite-ember-ssr 0.3.0 (minor)
+
+#### :rocket: Enhancement
+* `vite-ember-ssr`
+  * [#7](https://github.com/evoactivity/vite-ember-ssr/pull/7) feat: forward request headers to fetch calls during SSR ([@st-h](https://github.com/st-h))
+
+#### Committers: 1
+- Steve ([@st-h](https://github.com/st-h))
+
 ## Release (2026-05-27)
 
 * vite-ember-ssr 0.2.0 (minor)
