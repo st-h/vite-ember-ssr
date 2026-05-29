@@ -23,7 +23,13 @@ import type {
   EmberApplicationInstance,
   BootOptions,
   ShoeboxEntry,
+  ForwardedCookie,
 } from './server.js';
+import {
+  compose,
+  forwardCookieMiddleware,
+  shoeboxMiddleware,
+} from './fetch-middleware.js';
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -33,6 +39,7 @@ export interface WorkerRenderOptions {
   shoebox: boolean;
   cssManifest: CssManifest | null;
   settledTimeout: number;
+  forwardCookie: ForwardedCookie | null;
 }
 
 export interface WorkerRenderResult {
@@ -131,44 +138,27 @@ const app: EmberApplication = startupMod.createSsrApp();
 const appSettled: (() => Promise<void>) | null =
   typeof startupMod.settled === 'function' ? startupMod.settled : null;
 
-// ─── Shoebox ──────────────────────────────────────────────────────────
+// ─── Fetch middleware pipeline ────────────────────────────────────────
 
 const SHOEBOX_SCRIPT_ID = 'vite-ember-ssr-shoebox';
 
-// The fetch interceptor is installed once at startup. globalThis.fetch
-// never changes. Each render passes a fresh entries Map so there is no
-// bleed between requests.
+// The fetch pipeline is installed once at startup. globalThis.fetch never
+// changes. Per-render state (shoebox entries, forwarded cookie) lives in
+// module-level variables that the middlewares read via getters.
 const realFetch = globalThis.fetch;
-let shoeboxEntries: Map<string, ShoeboxEntry> | null = null;
+let activeShoebox: Map<string, ShoeboxEntry> | null = null;
+let activeCookie: ForwardedCookie | null = null;
 
-const interceptedFetch: typeof fetch = async (input, init) => {
-  const request = new Request(input, init);
-  if (request.method.toUpperCase() !== 'GET') return realFetch(input, init);
-  const response = await realFetch(input, init);
-  if (shoeboxEntries) {
-    try {
-      const clone = response.clone();
-      const body = await clone.text();
-      const headers: Record<string, string> = {};
-      clone.headers.forEach((v, k) => {
-        headers[k] = v;
-      });
-      shoeboxEntries.set(request.url, {
-        url: request.url,
-        status: clone.status,
-        statusText: clone.statusText,
-        headers,
-        body,
-      });
-    } catch {
-      /* skip */
-    }
-  }
-  return response;
-};
+const fetchWithMiddleware = compose(
+  [
+    forwardCookieMiddleware(() => activeCookie),
+    shoeboxMiddleware(() => activeShoebox),
+  ],
+  (request) => realFetch(request),
+);
 
 // Install once — never needs to be restored.
-globalThis.fetch = interceptedFetch;
+globalThis.fetch = fetchWithMiddleware;
 
 function serializeShoebox(entries: ShoeboxEntry[]): string {
   if (entries.length === 0) return '';
@@ -246,14 +236,15 @@ async function awaitSettled(timeoutMs: number): Promise<void> {
 export default async function render(
   options: WorkerRenderOptions,
 ): Promise<WorkerRenderResult> {
-  const { url, shoebox, cssManifest, settledTimeout } = options;
+  const { url, shoebox, cssManifest, settledTimeout, forwardCookie } = options;
 
   // Use the long-lived document directly — no new Window, no globalThis swap.
   const document = win.document;
 
-  // Give the interceptor a fresh Map for this render, or null if shoebox
-  // is disabled, so entries never bleed between requests.
-  shoeboxEntries = shoebox ? new Map() : null;
+  // Set per-render state. The middlewares read these via getters, so a
+  // single shared pipeline can serve every render without re-installation.
+  activeShoebox = shoebox ? new Map() : null;
+  activeCookie = forwardCookie;
 
   let head = '';
   let body = '';
@@ -310,9 +301,13 @@ export default async function render(
   }
 
   const shoeboxHTML =
-    shoeboxEntries && shoeboxEntries.size > 0
-      ? serializeShoebox(Array.from(shoeboxEntries.values()))
+    activeShoebox && activeShoebox.size > 0
+      ? serializeShoebox(Array.from(activeShoebox.values()))
       : '';
+
+  // Clear per-render state so a stray late fetch can't see stale config.
+  activeShoebox = null;
+  activeCookie = null;
   const rehydrateHTML =
     '<script>window.__vite_ember_ssr_rehydrate__=true</script>';
   const fullHead = cssLinks + rehydrateHTML + shoeboxHTML + head;

@@ -39,6 +39,27 @@ export interface BootOptions {
   _renderMode?: 'serialize' | 'rehydrate' | undefined;
 }
 
+/**
+ * Configures forwarding of the incoming request's `Cookie` header to
+ * fetch() calls made during SSR rendering.
+ *
+ * `allowedHosts` is required: forwarding the session cookie to every
+ * outbound fetch would leak credentials to third-party APIs the route
+ * happens to call. Each entry is matched against the request URL's
+ * `host` (hostname plus port) using exact equality — suffix wildcards
+ * are not supported.
+ */
+export interface ForwardedCookie {
+  /** Cookie header value from the incoming request. */
+  value: string;
+  /**
+   * Hosts (`URL.host`) the cookie may be sent to. Exact match, no wildcards.
+   *
+   * @example ['api.example.com', 'auth.example.com:8080']
+   */
+  allowedHosts: string[];
+}
+
 export interface RenderRouteOptions {
   /**
    * When true, intercepts all fetch() calls during SSR rendering and
@@ -66,6 +87,24 @@ export interface RenderRouteOptions {
    * @default 10000
    */
   settledTimeout?: number;
+
+  /**
+   * Forward the incoming request's `Cookie` header to fetch() calls made
+   * during SSR rendering. The cookie is only sent to hosts listed in
+   * `allowedHosts`, so credentials never leak to third-party APIs the
+   * route may also call.
+   *
+   * @example
+   * ```js
+   * await app.renderRoute(req.url, {
+   *   forwardCookie: {
+   *     value: req.headers.cookie ?? '',
+   *     allowedHosts: ['api.example.com'],
+   *   },
+   * });
+   * ```
+   */
+  forwardCookie?: ForwardedCookie;
 }
 
 export interface RenderResult {
@@ -281,6 +320,7 @@ export async function createEmberApp(
         shoebox: renderOptions.shoebox ?? false,
         cssManifest: renderOptions.cssManifest ?? null,
         settledTimeout: renderOptions.settledTimeout ?? 10_000,
+        forwardCookie: renderOptions.forwardCookie ?? null,
       })) as {
         head: string;
         body: string;

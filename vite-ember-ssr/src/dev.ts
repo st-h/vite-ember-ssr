@@ -32,9 +32,15 @@ import type {
   RenderRouteOptions,
   RenderResult,
   ShoeboxEntry,
+  ForwardedCookie,
   EmberApp,
   EmberAppDevOptions,
 } from './server.js';
+import {
+  compose,
+  forwardCookieMiddleware,
+  shoeboxMiddleware,
+} from './fetch-middleware.js';
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -178,6 +184,7 @@ export function createDevEmberApp(
         shoebox = false,
         cssManifest,
         settledTimeout = 10_000,
+        forwardCookie,
       } = renderOptions;
 
       // Fresh Window per request — no state bleeds between renders in dev.
@@ -195,42 +202,23 @@ export function createDevEmberApp(
 
       const savedGlobals = installGlobals(win);
 
-      // Shoebox: intercept fetch for this render only.
+      // Build a per-render fetch middleware pipeline. State is captured by
+      // closure so each render is fully isolated from the next.
       const realFetch = globalThis.fetch;
       const shoeboxEntries: Map<string, ShoeboxEntry> | null = shoebox
         ? new Map()
         : null;
+      const cookie: ForwardedCookie | null = forwardCookie ?? null;
+      const middlewareActive = shoeboxEntries !== null || cookie !== null;
 
-      if (shoebox) {
-        globalThis.fetch = async (
-          input: RequestInfo | URL,
-          init?: RequestInit,
-        ) => {
-          const request = new Request(input, init);
-          if (request.method.toUpperCase() !== 'GET')
-            return realFetch(input, init);
-          const response = await realFetch(input, init);
-          if (shoeboxEntries) {
-            try {
-              const clone = response.clone();
-              const body = await clone.text();
-              const headers: Record<string, string> = {};
-              clone.headers.forEach((v: string, k: string) => {
-                headers[k] = v;
-              });
-              shoeboxEntries.set(request.url, {
-                url: request.url,
-                status: clone.status,
-                statusText: clone.statusText,
-                headers,
-                body,
-              });
-            } catch {
-              /* skip */
-            }
-          }
-          return response;
-        };
+      if (middlewareActive) {
+        globalThis.fetch = compose(
+          [
+            forwardCookieMiddleware(() => cookie),
+            shoeboxMiddleware(() => shoeboxEntries),
+          ],
+          (request) => realFetch(request),
+        );
       }
 
       let head = '';
@@ -317,7 +305,7 @@ export function createDevEmberApp(
       } catch (e) {
         error = e instanceof Error ? e : new Error(String(e));
       } finally {
-        if (shoebox) globalThis.fetch = realFetch;
+        if (middlewareActive) globalThis.fetch = realFetch;
         restoreGlobals(savedGlobals);
         await win.happyDOM?.close?.();
       }
