@@ -6,7 +6,7 @@
  * Koa-style onion of middlewares, each of which may inspect/modify the
  * request, await `next(req)`, and inspect/modify the response.
  *
- * Two middlewares ship with the library:
+ * Three middlewares ship with the library:
  *  - `forwardCookieMiddleware` — injects the incoming request's `Cookie`
  *    header into outbound fetches whose host appears in `allowedHosts`,
  *    so SSR can make authenticated calls on behalf of the user without
@@ -14,6 +14,9 @@
  *  - `shoeboxMiddleware` — captures GET responses into a per-render
  *    Map so they can be serialized into the HTML for the client to
  *    replay during rehydration.
+ *  - `abortSignalMiddleware` — ties outbound fetches to a per-render
+ *    AbortSignal so requests still in flight when a render finishes are
+ *    aborted instead of lingering into later renders.
  *
  * Worker mode installs the pipeline once at startup and swaps per-render
  * state via getters; dev mode rebuilds the pipeline per request with
@@ -76,6 +79,37 @@ export function forwardCookieMiddleware(
     const merged = new Headers(request.headers);
     merged.set('cookie', cookie.value);
     return next(new Request(request, { headers: merged }));
+  };
+}
+
+/**
+ * Middleware that ties outbound fetches to a per-render AbortSignal, so
+ * requests still in flight when the render finishes (typically after a
+ * `settled()` timeout) are aborted instead of lingering into later
+ * renders on the same worker.
+ *
+ * @param getSignal Function returning the active per-render signal, or
+ *   `null` when no render-scoped abort is configured.
+ */
+export function abortSignalMiddleware(
+  getSignal: () => AbortSignal | null,
+): FetchMiddleware {
+  return (request, next) => {
+    const signal = getSignal();
+    if (!signal) return next(request);
+
+    // Preserve any signal app code attached to its own request.
+    const combined = request.signal
+      ? AbortSignal.any([request.signal, signal])
+      : signal;
+    const result = next(new Request(request, { signal: combined }));
+
+    // A render-scoped abort fires after the app that issued the fetch has
+    // been torn down, so its rejection may have nothing left awaiting it.
+    // Pre-attach a no-op handler to keep such late rejections from crashing
+    // the worker as unhandled; the caller still receives the rejection.
+    result.catch(() => {});
+    return result;
   };
 }
 

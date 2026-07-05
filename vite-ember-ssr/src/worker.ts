@@ -29,6 +29,7 @@ import type {
   ForwardedCookie,
 } from './server.js';
 import {
+  abortSignalMiddleware,
   compose,
   forwardCookieMiddleware,
   shoeboxMiddleware,
@@ -151,11 +152,13 @@ const SHOEBOX_SCRIPT_ID = 'vite-ember-ssr-shoebox';
 const realFetch = globalThis.fetch;
 let activeShoebox: Map<string, ShoeboxEntry> | null = null;
 let activeCookie: ForwardedCookie | null = null;
+let activeAbort: AbortController | null = null;
 
 const fetchWithMiddleware = compose(
   [
     forwardCookieMiddleware(() => activeCookie),
     shoeboxMiddleware(() => activeShoebox),
+    abortSignalMiddleware(() => activeAbort?.signal ?? null),
   ],
   (request) => realFetch(request),
 );
@@ -248,6 +251,7 @@ export default async function render(
   // single shared pipeline can serve every render without re-installation.
   activeShoebox = shoebox ? new Map() : null;
   activeCookie = forwardCookie;
+  activeAbort = new AbortController();
 
   // Snapshot the pre-render <head> state so the finally below can restore
   // it. ember-page-title and similar addons write into <head> during the
@@ -334,6 +338,13 @@ export default async function render(
     } catch {
       /* storage unavailable in this happy-dom configuration */
     }
+
+    // Abort any fetches this render left in flight (e.g. after a settled()
+    // timeout) so they stop consuming the connection instead of lingering
+    // into later renders. Their shoebox entries — if a response still
+    // arrives — go to this render's already-dead map (see shoeboxMiddleware).
+    activeAbort?.abort();
+    activeAbort = null;
   }
 
   const shoeboxHTML =

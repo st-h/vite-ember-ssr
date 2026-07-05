@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  abortSignalMiddleware,
   compose,
   forwardCookieMiddleware,
   shoeboxMiddleware,
@@ -173,6 +174,79 @@ describe('shoeboxMiddleware', () => {
     );
 
     expect(entries.size).toBe(0);
+  });
+});
+
+// ─── abortSignalMiddleware ───────────────────────────────────────────
+
+describe('abortSignalMiddleware', () => {
+  it('passes through unchanged when no signal is configured', async () => {
+    let observed;
+    const terminal = async (req) => {
+      observed = req;
+      return new Response('ok');
+    };
+
+    const original = new Request('https://api.example.com/x');
+    await compose([abortSignalMiddleware(() => null)], terminal)(original);
+
+    expect(observed.signal.aborted).toBe(false);
+  });
+
+  it('attaches the render signal so aborting cancels the outbound request', async () => {
+    const controller = new AbortController();
+    let observed;
+    const terminal = async (req) => {
+      observed = req;
+      return new Response('ok');
+    };
+
+    await compose(
+      [abortSignalMiddleware(() => controller.signal)],
+      terminal,
+    )('https://api.example.com/x');
+
+    expect(observed.signal.aborted).toBe(false);
+    controller.abort();
+    expect(observed.signal.aborted).toBe(true);
+  });
+
+  it("also honours the app's own signal on the request", async () => {
+    const renderController = new AbortController();
+    const appController = new AbortController();
+    let observed;
+    const terminal = async (req) => {
+      observed = req;
+      return new Response('ok');
+    };
+
+    await compose(
+      [abortSignalMiddleware(() => renderController.signal)],
+      terminal,
+    )('https://api.example.com/x', { signal: appController.signal });
+
+    expect(observed.signal.aborted).toBe(false);
+    appController.abort();
+    expect(observed.signal.aborted).toBe(true);
+  });
+
+  it('rejects the in-flight fetch when the render signal aborts', async () => {
+    const controller = new AbortController();
+    const terminal = (req) =>
+      new Promise((_resolve, reject) => {
+        req.signal.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError')),
+        );
+      });
+
+    const inFlight = compose(
+      [abortSignalMiddleware(() => controller.signal)],
+      terminal,
+    )('https://api.example.com/orphan');
+
+    controller.abort();
+
+    await expect(inFlight).rejects.toThrow('aborted');
   });
 });
 
