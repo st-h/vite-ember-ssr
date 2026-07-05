@@ -289,8 +289,14 @@ export default async function render(
     // corrupt the next visit. This MUST run even when the render above throws
     // (settle timeout, CSS build, DOM read) — otherwise the leaked instance
     // accumulates in the long-lived worker. `instance` is undefined when
-    // app.visit() itself threw before assigning it.
-    instance?.destroy();
+    // app.visit() itself threw before assigning it. Guard the call: a destroy
+    // that throws inside this finally would skip the DOM reset below and mask
+    // the render's own error.
+    try {
+      instance?.destroy();
+    } catch {
+      /* instance teardown failed — the DOM reset below must still run */
+    }
 
     // Serialize mode leaves rehydration markers in the DOM; reset the body so
     // the next render starts from a clean slate regardless of success/failure.
