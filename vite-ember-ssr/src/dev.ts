@@ -73,6 +73,10 @@ const BROWSER_GLOBALS = [
 
 const SHOEBOX_SCRIPT_ID = 'vite-ember-ssr-shoebox';
 
+// Warn only once per process — the SSR entry is re-loaded on every render
+// in dev mode, so a per-render warning would flood the console.
+let warnedMissingSettled = false;
+
 // ─── Helpers ──────────────────────────────────────────────────────────
 
 function installGlobals(win: Window): Record<string, unknown> {
@@ -284,6 +288,16 @@ export function createDevEmberApp(
             if (timer) clearTimeout(timer);
           }
         } else {
+          if (settledTimeout > 0 && !warnedMissingSettled) {
+            warnedMissingSettled = true;
+            console.warn(
+              '[vite-ember-ssr] settledTimeout is set but the SSR entry does ' +
+                'not export `settled` — renders will NOT wait for the app to ' +
+                'settle and may capture incomplete HTML. Add ' +
+                "`export { settled } from '@ember/test-helpers';` to your " +
+                'SSR entry.',
+            );
+          }
           await new Promise<void>((resolve) => setTimeout(resolve, 0));
         }
 
