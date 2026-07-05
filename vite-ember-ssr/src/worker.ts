@@ -6,9 +6,12 @@
  * every render. Renders are serialised by tinypool (concurrentTasksPerWorker:1),
  * so there is no concurrency concern within a single worker.
  *
- * app.visit() fully owns document.head/body between calls, so DOM state does
- * not bleed across renders. A fresh ApplicationInstance is created per visit
- * and destroyed after the DOM is read, keeping container singletons clean.
+ * A fresh ApplicationInstance is created per visit and destroyed after the
+ * DOM is read, keeping container singletons clean. Because the Window is
+ * long-lived, every render resets the mutable per-request window state in a
+ * finally block: document.body (content + attributes), document.head/title,
+ * and local/session storage. Without this, one request's DOM or storage
+ * writes would bleed into the next request served by this worker.
  *
  * The shoebox fetch interceptor is installed once at startup. Each render
  * assigns a fresh entries Map before visiting, so entries never bleed between
@@ -246,6 +249,13 @@ export default async function render(
   activeShoebox = shoebox ? new Map() : null;
   activeCookie = forwardCookie;
 
+  // Snapshot the pre-render <head> state so the finally below can restore
+  // it. ember-page-title and similar addons write into <head> during the
+  // render; without a reset, one request's document title (which may contain
+  // private data) bleeds into every later render served by this worker.
+  const preRenderTitle = document.title;
+  const preRenderHead = document.head?.innerHTML ?? '';
+
   let head = '';
   let body = '';
   let bodyAttrs: Record<string, string> = {};
@@ -307,6 +317,22 @@ export default async function render(
       for (const attr of Array.from(document.body.attributes)) {
         document.body.removeAttribute(attr.name);
       }
+    }
+
+    // Restore <head> (and the title) to its pre-render state. The rendered
+    // head HTML was already captured above, so anything the render added —
+    // <title> via ember-page-title, meta tags, etc. — must not survive into
+    // the next request's document.
+    if (document.head) document.head.innerHTML = preRenderHead;
+    if (document.title !== preRenderTitle) document.title = preRenderTitle;
+
+    // Clear web storage so values written during the render (user
+    // preferences, cached tokens) don't bleed into the next request.
+    try {
+      win.localStorage.clear();
+      win.sessionStorage.clear();
+    } catch {
+      /* storage unavailable in this happy-dom configuration */
     }
   }
 
