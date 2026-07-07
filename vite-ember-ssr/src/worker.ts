@@ -204,8 +204,19 @@ function buildRouteCssLinks(
   return links.join('');
 }
 
+let warnedMissingSettled = false;
+
 async function awaitSettled(timeoutMs: number): Promise<void> {
   if (!appSettled) {
+    if (timeoutMs > 0 && !warnedMissingSettled) {
+      warnedMissingSettled = true;
+      console.warn(
+        '[vite-ember-ssr] settledTimeout is set but the SSR bundle does not ' +
+          'export `settled` — renders will NOT wait for the app to settle ' +
+          'and may capture incomplete HTML. Add ' +
+          "`export { settled } from '@ember/test-helpers';` to your SSR entry.",
+      );
+    }
     // Fallback: drain Backburner's autorun microtask before reading the DOM.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     return;
